@@ -43,7 +43,16 @@ if (!existsSync(serverPath)) {
 
 // 載入並執行 server（使用 file:// URL 格式）
 const serverUrl = `file://${serverPath}`;
-import(serverUrl).catch(error => {
+import(serverUrl).then(module => {
+  // 如果模組導出了 DevAdvisorServer，手動啟動它
+  if (module.DevAdvisorServer) {
+    const server = new module.DevAdvisorServer();
+    server.run().catch((error) => {
+      console.error('伺服器啟動失敗:', error);
+      process.exit(1);
+    });
+  }
+}).catch(error => {
   console.error('Failed to load server:', error);
   process.exit(1);
 });
