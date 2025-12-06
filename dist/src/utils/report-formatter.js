@@ -137,7 +137,7 @@ export class ReportFormatter {
         }
         report += `總計可能節省 ${summary.bundleSizeReduction}KB 檔案大小，提升 ${summary.potentialPerformanceGain}% 效能。\n\n`;
         report += '---\n';
-        report += '*此報告由開發決策顧問自動生成*\n';
+        report += '*此報告由 [@mukiwu/dev-advisor-mcp](https://github.com/mukiwu/dev-advisor-mcp) 自動生成*\n';
         return report;
     }
     /**
@@ -227,7 +227,7 @@ export class ReportFormatter {
         }
         html += `
     <footer style="margin-top: 50px; padding-top: 20px; border-top: 1px solid #e1e5e9; color: #6c757d; text-align: center;">
-        此報告由開發決策顧問自動生成
+        此報告由 [@mukiwu/dev-advisor-mcp](https://github.com/mukiwu/dev-advisor-mcp) 自動生成
     </footer>
 </body>
 </html>`;
