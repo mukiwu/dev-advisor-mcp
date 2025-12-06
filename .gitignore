@@ -5,7 +5,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Build outputs
-dist/
+# Note: dist/ is committed to the repo for GitHub Actions to work
+# (GitHub Actions downloads the repo directly, so dist needs to be present)
 build/
 *.tsbuildinfo
 

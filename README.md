@@ -45,26 +45,151 @@ npm install
 npm run build
 ```
 
+## 🔧 GitHub Actions 整合
+
+### 快速開始
+
+在您的專案中創建 `.github/workflows/dev-advisor.yml`：
+
+```yaml
+name: Dev Advisor Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - uses: mukiwu/dev-advisor-mcp@v1
+        with:
+          project-path: '.'
+          enable-modernization: true
+          enable-compatibility: true
+          comment-on-pr: true
+```
+
+### 輸入參數
+
+| 參數 | 說明 | 預設值 | 必填 |
+|------|------|--------|------|
+| `project-path` | 專案目錄路徑 | `.` | ❌ |
+| `include-patterns` | 包含的檔案模式（JSON 陣列） | `["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]` | ❌ |
+| `exclude-patterns` | 排除的檔案模式（JSON 陣列） | `["node_modules/**", "dist/**", "build/**"]` | ❌ |
+| `browserslist-config` | browserslist 配置字串 | `""` | ❌ |
+| `enable-modernization` | 啟用現代化分析 | `true` | ❌ |
+| `enable-compatibility` | 啟用相容性分析 | `true` | ❌ |
+| `enable-browser-check` | 啟用瀏覽器支援檢查 | `true` | ❌ |
+| `github-token` | GitHub Token | `${{ github.token }}` | ❌ |
+| `comment-on-pr` | 是否在 PR 中留言 | `true` | ❌ |
+
+### 進階使用
+
+```yaml
+- uses: mukiwu/dev-advisor-mcp@v1
+  with:
+    project-path: './src'
+    include-patterns: '["src/**/*.js", "src/**/*.ts"]'
+    exclude-patterns: '["**/*.test.ts", "**/*.spec.ts"]'
+    browserslist-config: 'last 2 versions, > 1%, not dead'
+    enable-modernization: true
+    enable-compatibility: true
+    enable-browser-check: false
+    comment-on-pr: true
+```
+
+### 輸出
+
+Action 會產生以下輸出：
+
+- `modernization-report`: 現代化分析報告（Markdown）
+- `compatibility-report`: 相容性分析報告（Markdown）
+- `summary`: 分析摘要（JSON）
+
+### 完整範例
+
+查看 [examples/pr-check.yml](examples/pr-check.yml) 取得完整範例。
+
 ## ⚙️ MCP 配置
 
-### Claude Desktop 配置
+### 方式一：使用 npm 全局安裝（推薦）
 
-編輯 `~/.claude/config.json`：
+首先全局安裝：
+
+```bash
+npm install -g @mukiwu/dev-advisor-mcp
+```
+
+然後在 Claude Desktop 或 Cursor IDE 中配置：
+
+**Claude Desktop 配置** (`~/.claude/config.json`)：
 
 ```json
 {
   "mcpServers": {
     "dev-advisor": {
-      "command": "node",
-      "args": ["/path/to/dev-advisor-mcp/dist/src/server.js"]
+      "command": "dev-advisor"
     }
   }
 }
 ```
 
-### Cursor IDE 配置
+**Cursor IDE 配置**：
 
-在 Cursor 設定中加入 MCP Server：
+```json
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "dev-advisor"
+    }
+  }
+}
+```
+
+### 方式二：使用 npx（無需全局安裝）
+
+**Claude Desktop 配置** (`~/.claude/config.json`)：
+
+```json
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "npx",
+      "args": ["-y", "@mukiwu/dev-advisor-mcp"]
+    }
+  }
+}
+```
+
+**Cursor IDE 配置**：
+
+```json
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "npx",
+      "args": ["-y", "@mukiwu/dev-advisor-mcp"]
+    }
+  }
+}
+```
+
+**注意**：現在已經修復了 `npx` 的路徑問題，應該可以正常使用了。如果仍有問題，建議使用方式一（全局安裝）。
+
+### 方式三：使用本地安裝路徑
+
+如果從原始碼安裝或使用本地路徑：
 
 ```json
 {
@@ -443,6 +568,7 @@ Moment.js 體積過大且不支援 tree-shaking...
 
 - [x] ~~智慧 API 組合查詢引擎~~ ✅ 已完成 (`recommend_api_combination`)
 - [x] ~~基於 browserslist 的深度相容性分析~~ ✅ 已完成 (`analyze_compatibility`)
+- [x] ~~GitHub Actions 整合~~ ✅ 已完成
 - [ ] CLI 獨立工具
 - [ ] Web 視覺化介面
 - [ ] 自動重構程式碼轉換

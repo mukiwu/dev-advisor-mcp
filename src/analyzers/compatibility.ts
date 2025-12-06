@@ -845,33 +845,31 @@ function formatAsMarkdown(analysis: CompatibilityAnalysis): string {
 }
 
 /**
- * 建立 ASCII 表格（適用於 Cursor 等不支援 Markdown 表格的環境）
+ * 建立 GitHub Flavored Markdown 表格（在 GitHub 評論中正確顯示）
  */
 function createAsciiTable(headers: string[], rows: string[][]): string {
-  // 計算每欄的最大寬度
-  const colWidths = headers.map((h, i) => {
-    const cellWidths = rows.map(row => (row[i] || '').length);
-    return Math.max(h.length, ...cellWidths);
-  });
-
-  // 建立分隔線
-  const separator = '+' + colWidths.map(w => '-'.repeat(w + 2)).join('+') + '+';
-  
-  // 建立行
-  const formatRow = (cells: string[]) => {
-    return '| ' + cells.map((cell, i) => (cell || '').padEnd(colWidths[i])).join(' | ') + ' |';
+  // 轉義表格中的管道符號，避免破壞表格結構
+  const escapeCell = (cell: string): string => {
+    return cell.replace(/\|/g, '\\|').replace(/\n/g, ' ');
   };
 
+  // 建立表頭
+  const headerRow = '| ' + headers.map(escapeCell).join(' | ') + ' |';
+  
+  // 建立分隔線（GitHub Markdown 表格需要至少 3 個破折號）
+  const separator = '| ' + headers.map(() => '---').join(' | ') + ' |';
+  
+  // 建立資料行
+  const dataRows = rows.map(row => {
+    return '| ' + row.map(cell => escapeCell(cell || '')).join(' | ') + ' |';
+  });
+
   // 組合表格
-  let table = '```\n';
+  let table = '\n';
+  table += headerRow + '\n';
   table += separator + '\n';
-  table += formatRow(headers) + '\n';
-  table += separator + '\n';
-  for (const row of rows) {
-    table += formatRow(row) + '\n';
-  }
-  table += separator + '\n';
-  table += '```\n';
+  table += dataRows.join('\n') + '\n';
+  table += '\n';
 
   return table;
 }
