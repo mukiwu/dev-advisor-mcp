@@ -30,6 +30,7 @@
   "license": "MIT",
   "files": [
     "dist/**/*",
+    "action/**/*",
     "README.md",
     "USAGE.md"
   ],
@@ -38,6 +39,8 @@
     "url": "https://github.com/mukiwu/dev-advisor-mcp.git"
   },
   "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "@typescript-eslint/parser": "^8.0.0",
     "ast-types": "^0.16.0",
