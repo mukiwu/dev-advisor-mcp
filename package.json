@@ -15,7 +15,7 @@
     "postinstall": "npm run build"
   },
   "bin": {
-    "dev-advisor": "dist/src/server.js"
+    "dev-advisor": "bin/dev-advisor.js"
   },
   "keywords": [
     "mcp",
@@ -30,6 +30,7 @@
   "license": "MIT",
   "files": [
     "dist/**/*",
+    "bin/**/*",
     "action/**/*",
     "README.md",
     "USAGE.md"

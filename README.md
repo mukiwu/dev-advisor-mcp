@@ -123,24 +123,73 @@ Action 會產生以下輸出：
 
 ## ⚙️ MCP 配置
 
-### Claude Desktop 配置
+### 方式一：使用 npm 全局安裝（推薦）
 
-編輯 `~/.claude/config.json`：
+首先全局安裝：
+
+```bash
+npm install -g @mukiwu/dev-advisor-mcp
+```
+
+然後在 Claude Desktop 或 Cursor IDE 中配置：
+
+**Claude Desktop 配置** (`~/.claude/config.json`)：
 
 ```json
 {
   "mcpServers": {
     "dev-advisor": {
-      "command": "node",
-      "args": ["/path/to/dev-advisor-mcp/dist/src/server.js"]
+      "command": "dev-advisor"
     }
   }
 }
 ```
 
-### Cursor IDE 配置
+**Cursor IDE 配置**：
 
-在 Cursor 設定中加入 MCP Server：
+```json
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "dev-advisor"
+    }
+  }
+}
+```
+
+### 方式二：使用 npx（無需全局安裝）
+
+**Claude Desktop 配置** (`~/.claude/config.json`)：
+
+```json
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "npx",
+      "args": ["-y", "@mukiwu/dev-advisor-mcp"]
+    }
+  }
+}
+```
+
+**Cursor IDE 配置**：
+
+```json
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "npx",
+      "args": ["-y", "@mukiwu/dev-advisor-mcp"]
+    }
+  }
+}
+```
+
+**注意**：現在已經修復了 `npx` 的路徑問題，應該可以正常使用了。如果仍有問題，建議使用方式一（全局安裝）。
+
+### 方式三：使用本地安裝路徑
+
+如果從原始碼安裝或使用本地路徑：
 
 ```json
 {
