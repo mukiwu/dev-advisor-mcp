@@ -16,7 +16,7 @@ npm install @muki/dev-advisor-mcp
 
 ```bash
 # 克隆專案
-git clone https://github.com/yourusername/dev-advisor-mcp.git
+git clone https://github.com/mukiwu/dev-advisor-mcp.git
 cd dev-advisor-mcp
 
 # 安裝依賴並建置

@@ -39,7 +39,7 @@ npm install -g @muki/dev-advisor-mcp
 ### 從原始碼安裝
 
 ```bash
-git clone https://github.com/yourusername/dev-advisor-mcp.git
+git clone https://github.com/mukiwu/dev-advisor-mcp.git
 cd dev-advisor-mcp
 npm install
 npm run build
