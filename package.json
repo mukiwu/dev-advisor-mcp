@@ -1,6 +1,6 @@
 {
   "name": "@mukiwu/dev-advisor-mcp",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "開發決策顧問 MCP Server - 協助程式碼現代化、API 組合推薦和相容性分析",
   "main": "dist/src/server.js",
   "type": "module",
@@ -11,8 +11,7 @@
     "test": "vitest",
     "lint": "eslint src/**/*.ts",
     "format": "prettier --write src/**/*.ts",
-    "prepublishOnly": "npm run build",
-    "postinstall": "npm run build"
+    "prepublishOnly": "npm run build"
   },
   "bin": {
     "dev-advisor": "bin/dev-advisor.js"
