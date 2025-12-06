@@ -1,0 +1,60 @@
+{
+  "name": "@mukiwu/dev-advisor-mcp",
+  "version": "1.0.0",
+  "description": "開發決策顧問 MCP Server - 協助程式碼現代化、API 組合推薦和相容性分析",
+  "main": "dist/src/server.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/server.ts",
+    "start": "node dist/src/server.js",
+    "test": "vitest",
+    "lint": "eslint src/**/*.ts",
+    "format": "prettier --write src/**/*.ts",
+    "prepublishOnly": "npm run build",
+    "postinstall": "npm run build"
+  },
+  "bin": {
+    "dev-advisor": "dist/src/server.js"
+  },
+  "keywords": [
+    "mcp",
+    "code-analysis",
+    "modernization",
+    "api-recommendations",
+    "browser-compatibility",
+    "claude",
+    "mcp-server"
+  ],
+  "author": "Muki",
+  "license": "MIT",
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "USAGE.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/dev-advisor-mcp.git"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "ast-types": "^0.16.0",
+    "browserslist": "^4.28.0",
+    "glob": "^10.0.0",
+    "node-fetch": "^3.3.0",
+    "recast": "^0.23.0",
+    "typescript": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "tsx": "^4.0.0",
+    "vitest": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

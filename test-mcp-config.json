@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "node",
+      "args": ["/Users/muki/Documents/01.project/code-tools/dev-advisor-mcp/dist/src/server.js"],
+      "description": "開發決策顧問 - 分析程式碼現代化機會，減少 bundle 大小"
+    }
+  }
+}

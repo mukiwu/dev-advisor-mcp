@@ -1,0 +1,41 @@
+# Source code (只發佈編譯後的檔案)
+src/
+tsconfig.json
+test-*.js
+
+# Development files
+.eslintrc*
+.prettierrc*
+.gitignore
+.npmignore
+
+# Test files
+test/
+tests/
+__tests__/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Documentation (除了 README 和 USAGE)
+docs/
+examples/
+
+# Development dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+*.tmp
+*.swp
+*.swo

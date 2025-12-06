@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "dev-advisor": {
+      "command": "node",
+      "args": ["dist/src/server.js"],
+      "description": "開發決策顧問 - 程式碼現代化分析、API 組合推薦、相容性檢查"
+    }
+  }
+}
