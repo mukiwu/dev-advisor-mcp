@@ -1,0 +1,37 @@
+name: Dev Advisor Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  analyze:
+    name: 程式碼分析
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Run Dev Advisor Analysis
+        uses: mukiwu/dev-advisor-mcp@v1
+        with:
+          project-path: '.'
+          enable-modernization: true
+          enable-compatibility: true
+          enable-browser-check: true
+          comment-on-pr: true
+          # 可選：自訂檔案模式
+          # include-patterns: '["src/**/*.js", "src/**/*.ts"]'
+          # exclude-patterns: '["node_modules/**", "dist/**", "**/*.test.ts"]'
+          # browserslist-config: 'last 2 versions'
+

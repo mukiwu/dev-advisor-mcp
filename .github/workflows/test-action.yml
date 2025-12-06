@@ -1,0 +1,38 @@
+name: Test GitHub Action
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+
+jobs:
+  test-action:
+    name: 測試 Action
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        run: npm install
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Run Dev Advisor Analysis
+        uses: ./
+        with:
+          project-path: '.'
+          enable-modernization: true
+          enable-compatibility: true
+          comment-on-pr: true
+

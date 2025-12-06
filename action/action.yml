@@ -1,0 +1,65 @@
+name: 'Dev Advisor MCP'
+description: '自動分析程式碼現代化機會、API 相容性、瀏覽器支援，並在 PR 中回覆結果'
+author: 'Muki'
+branding:
+  icon: 'code'
+  color: 'blue'
+
+inputs:
+  project-path:
+    description: '專案目錄路徑'
+    required: false
+    default: '.'
+  
+  include-patterns:
+    description: '包含的檔案模式（JSON 陣列字串），例如 ["**/*.js", "**/*.ts"]'
+    required: false
+    default: '["**/*.js", "**/*.ts", "**/*.jsx", "**/*.tsx"]'
+  
+  exclude-patterns:
+    description: '排除的檔案模式（JSON 陣列字串），例如 ["node_modules/**", "dist/**"]'
+    required: false
+    default: '["node_modules/**", "dist/**", "build/**"]'
+  
+  browserslist-config:
+    description: 'browserslist 配置字串，例如 "last 2 versions" 或 "> 1%, last 2 versions, not dead"'
+    required: false
+    default: ''
+  
+  enable-modernization:
+    description: '啟用程式碼現代化分析'
+    required: false
+    default: 'true'
+  
+  enable-compatibility:
+    description: '啟用 API 相容性分析'
+    required: false
+    default: 'true'
+  
+  enable-browser-check:
+    description: '啟用瀏覽器支援檢查（檢查專案中使用的 API）'
+    required: false
+    default: 'true'
+  
+  github-token:
+    description: 'GitHub Token（用於發送 PR 評論）'
+    required: false
+    default: ${{ github.token }}
+  
+  comment-on-pr:
+    description: '是否在 PR 中留言'
+    required: false
+    default: 'true'
+
+outputs:
+  modernization-report:
+    description: '現代化分析報告（Markdown 格式）'
+  compatibility-report:
+    description: '相容性分析報告（Markdown 格式）'
+  summary:
+    description: '分析摘要（JSON 格式）'
+
+runs:
+  using: 'node20'
+  main: 'index.js'
+
