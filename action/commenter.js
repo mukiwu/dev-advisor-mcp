@@ -85,8 +85,8 @@ async function findExistingComment(octokit, owner, repo, prNumber) {
     // 查找由 bot 發送且包含特定標記的評論
     const botComment = comments.find(comment => {
       const body = comment.body || '';
-      return body.includes('<!-- dev-advisor-mcp -->') && 
-             comment.user?.type === 'Bot';
+      return body.includes('<!-- dev-advisor-mcp -->') &&
+        comment.user?.type === 'Bot';
     });
 
     return botComment || null;
@@ -102,13 +102,13 @@ async function findExistingComment(octokit, owner, repo, prNumber) {
 function formatCommentBody(report) {
   let body = '<!-- dev-advisor-mcp -->\n\n';
   body += '# 🔍 開發決策顧問分析報告\n\n';
-  body += `> 此報告由 [dev-advisor-mcp](https://github.com/mukiwu/dev-advisor-mcp) 自動生成\n\n`;
+  body += `> 此報告由 [@mukiwu/dev-advisor-mcp](https://github.com/mukiwu/dev-advisor-mcp) 自動生成\n\n`;
 
   // 添加現代化分析報告
   if (report.modernization) {
     body += '## 📊 程式碼現代化分析\n\n';
     const modernizationReport = report.modernization.report;
-    
+
     // 如果報告太長，截斷並添加提示
     if (modernizationReport.length > MAX_COMMENT_LENGTH - body.length - 1000) {
       const truncated = modernizationReport.substring(0, MAX_COMMENT_LENGTH - body.length - 1000);
@@ -125,7 +125,7 @@ function formatCommentBody(report) {
   if (report.compatibility) {
     body += '## 🌐 API 相容性分析\n\n';
     const compatibilityReport = report.compatibility.report;
-    
+
     // 檢查長度
     const remainingLength = MAX_COMMENT_LENGTH - body.length;
     if (compatibilityReport.length > remainingLength - 1000) {
@@ -151,7 +151,7 @@ function formatCommentBody(report) {
   // 添加摘要
   if (report.modernization || report.compatibility) {
     body += '## 📋 分析摘要\n\n';
-    
+
     if (report.modernization) {
       const summary = report.modernization.summary;
       body += '### 現代化分析\n';
@@ -174,7 +174,7 @@ function formatCommentBody(report) {
   }
 
   body += '\n---\n';
-  body += '*此評論由 [dev-advisor-mcp](https://github.com/mukiwu/dev-advisor-mcp) 自動生成*\n';
+  body += '*此評論由 [@mukiwu/dev-advisor-mcp](https://github.com/mukiwu/dev-advisor-mcp) 自動生成*\n';
 
   // 確保不超過長度限制
   if (body.length > MAX_COMMENT_LENGTH) {
