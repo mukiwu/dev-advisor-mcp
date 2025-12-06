@@ -82,11 +82,11 @@ async function findExistingComment(octokit, owner, repo, prNumber) {
       issue_number: prNumber
     });
 
-    // 查找由 bot 發送且包含特定標記的評論
+    // 查找包含特定標記的評論（優先找 Bot，但如果有標記就使用）
     const botComment = comments.find(comment => {
       const body = comment.body || '';
-      return body.includes('<!-- dev-advisor-mcp -->') &&
-        comment.user?.type === 'Bot';
+      // 只要包含標記就視為我們的評論（不限制 Bot，因為可能以其他身份執行）
+      return body.includes('<!-- dev-advisor-mcp -->');
     });
 
     return botComment || null;
