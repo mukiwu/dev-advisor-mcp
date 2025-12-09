@@ -122,11 +122,6 @@ const PROVIDERS = {
             parts: [{ text: userPrompt }]
           }
         ],
-        tools: [
-          {
-            google_search: {}
-          }
-        ],
         generationConfig: {
           maxOutputTokens: 8192
         }
