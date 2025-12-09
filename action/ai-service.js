@@ -43,12 +43,19 @@ const SYSTEM_PROMPT = `你是一位專精於 Web API 現代化和瀏覽器相容
 - 平滑動畫 → requestAnimationFrame / Web Animations API
 - 剪貼簿操作 → Clipboard API
 
+## 參考資料
+
+提供建議時，請盡可能引用 MDN Web Docs 的資料作為參考來源，並附上相關連結。
+例如：
+- fetch API: https://developer.mozilla.org/docs/Web/API/Fetch_API
+- IntersectionObserver: https://developer.mozilla.org/docs/Web/API/IntersectionObserver
+
 ## 輸出格式
 
 請用繁體中文、條理分明地回覆，包含：
 1. **變更摘要**：這個 PR 做了什麼
-2. **現代化建議**：具體的改進建議（附程式碼範例）
-3. **相容性注意事項**：需要注意的瀏覽器相容性問題
+2. **現代化建議**：具體的改進建議（附程式碼範例和 MDN 連結）
+3. **相容性注意事項**：需要注意的瀏覽器相容性問題（附 Can I Use 或 MDN 連結）
 4. **整體評估**：這個 PR 的程式碼品質評估`;
 
 // 提供者配置
@@ -115,8 +122,13 @@ const PROVIDERS = {
             parts: [{ text: userPrompt }]
           }
         ],
+        tools: [
+          {
+            google_search: {}
+          }
+        ],
         generationConfig: {
-          maxOutputTokens: 4096
+          maxOutputTokens: 8192
         }
       }
     }),
