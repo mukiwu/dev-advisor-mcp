@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "build:action": "npm run build && ncc build action/index.js -o action/dist --source-map --license licenses.txt",
     "dev": "tsx src/server.ts",
     "start": "node dist/src/server.js",
     "test": "vitest",

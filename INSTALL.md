@@ -153,7 +153,45 @@ npm install
 npm run build
 ```
 
-## 📞 支援
+## �‍💻 開發者指南
+
+### 編譯 GitHub Action
+
+如果你修改了 `action/` 目錄下的檔案或相關的分析器程式碼，需要重新編譯 GitHub Action：
+
+```bash
+# 編譯 TypeScript 並打包 Action
+npm run build:action
+```
+
+這個指令會：
+1. 執行 `tsc` 編譯 TypeScript
+2. 使用 `@vercel/ncc` 將 `action/index.js` 和所有依賴打包成 `action/dist/index.js`
+
+### 發布新版本
+
+發布新版本時，請遵循以下步驟：
+
+```bash
+# 1. 更新 package.json 中的版本號
+# 2. 編譯 Action
+npm run build:action
+
+# 3. 提交變更
+git add -A
+git commit -m "chore: release vX.X.X"
+git push origin main
+
+# 4. 建立版本標籤
+git tag vX.X.X
+git tag -f v1  # 更新 major version tag
+git push origin vX.X.X
+git push origin v1 -f
+```
+
+> **注意**：`v1` tag 應該永遠指向最新的 v1.x.x 版本，讓使用 `@v1` 的用戶自動獲得更新。
+
+## �📞 支援
 
 如果遇到問題，請：
 
@@ -164,3 +202,4 @@ npm run build
 ---
 
 安裝完成後，您就可以在 Claude Code 中使用智慧程式碼現代化分析功能了！🎉
+
