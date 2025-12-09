@@ -100,7 +100,7 @@ const PROVIDERS = {
 
   gemini: {
     name: 'Google Gemini',
-    defaultModel: 'gemini-2.0-flash',
+    defaultModel: 'gemini-2.5-flash',
     formatRequest: (model, systemPrompt, userPrompt, apiKey) => ({
       url: `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
       headers: {
