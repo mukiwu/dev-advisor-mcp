@@ -50,6 +50,25 @@ inputs:
     description: '是否在 PR 中留言'
     required: false
     default: 'true'
+  
+  ai-enabled:
+    description: '啟用 AI 分析（使用 AI 分析 PR 變更的程式碼，取代規則式分析）'
+    required: false
+    default: 'false'
+  
+  ai-provider:
+    description: 'AI 提供者：openai、anthropic、gemini'
+    required: false
+    default: 'openai'
+  
+  ai-model:
+    description: 'AI 模型名稱（例如：gpt-4o、claude-sonnet-4-20250514、gemini-2.0-flash），留空使用預設模型'
+    required: false
+    default: ''
+  
+  ai-api-key:
+    description: 'AI API 金鑰（建議使用 GitHub Secrets）'
+    required: false
 
 outputs:
   modernization-report:

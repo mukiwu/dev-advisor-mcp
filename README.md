@@ -93,6 +93,11 @@ jobs:
 | `enable-browser-check` | 啟用瀏覽器支援檢查 | `true` | ❌ |
 | `github-token` | GitHub Token | `${{ github.token }}` | ❌ |
 | `comment-on-pr` | 是否在 PR 中留言 | `true` | ❌ |
+| `ai-enabled` | 啟用 AI 分析模式 | `false` | ❌ |
+| `ai-provider` | AI 提供者：`openai`、`anthropic`、`gemini` | `openai` | ❌ |
+| `ai-model` | AI 模型名稱（留空使用預設） | `""` | ❌ |
+| `ai-api-key` | AI API 金鑰（建議使用 Secrets） | - | AI 模式必填 |
+
 
 ### 進階使用
 
@@ -108,6 +113,30 @@ jobs:
     enable-browser-check: false
     comment-on-pr: true
 ```
+
+### 🤖 AI 分析模式
+
+使用 AI 分析 PR 變更的程式碼，提供更智慧的現代化建議：
+
+```yaml
+- uses: mukiwu/dev-advisor-mcp@v1
+  with:
+    ai-enabled: true
+    ai-provider: 'openai'  # 或 anthropic、gemini
+    ai-model: 'gpt-4o'     # 可選，留空使用預設模型
+    ai-api-key: ${{ secrets.OPENAI_API_KEY }}
+    comment-on-pr: true
+```
+
+**支援的 AI 提供者：**
+
+| 提供者 | 預設模型 | API Key 設定 |
+|--------|----------|--------------|
+| `openai` | `gpt-4o` | `OPENAI_API_KEY` |
+| `anthropic` | `claude-sonnet-4-20250514` | `ANTHROPIC_API_KEY` |
+| `gemini` | `gemini-2.0-flash` | `GOOGLE_API_KEY` |
+
+> **注意**：AI 分析模式會直接分析 PR 的 diff 內容，而非整個專案。建議將 API Key 存放在 GitHub Secrets 中。
 
 ### 輸出
 

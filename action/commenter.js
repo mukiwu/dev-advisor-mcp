@@ -185,3 +185,97 @@ function formatCommentBody(report) {
   return body;
 }
 
+/**
+ * 發送 AI 分析報告到 PR
+ * @param {string} token - GitHub Token
+ * @param {string} aiReport - AI 生成的報告內容
+ * @param {string} provider - AI 提供者
+ * @param {string} model - AI 模型
+ * @param {Object} prInfo - PR 資訊
+ */
+export async function commentAIReport(token, aiReport, provider, model, prInfo) {
+  const octokit = github.getOctokit(token);
+  const context = github.context;
+
+  // 檢查是否在 PR 環境中
+  if (context.eventName !== 'pull_request') {
+    core.warning('此 action 只能在 pull_request 事件中使用');
+    return null;
+  }
+
+  const owner = context.repo.owner;
+  const repo = context.repo.repo;
+  const prNumber = context.payload.pull_request?.number;
+
+  if (!prNumber) {
+    core.warning('無法取得 PR 編號');
+    return null;
+  }
+
+  try {
+    // 查找現有的評論
+    const existingComment = await findExistingComment(octokit, owner, repo, prNumber);
+
+    // 格式化 AI 報告
+    const commentBody = formatAICommentBody(aiReport, provider, model);
+
+    if (existingComment) {
+      // 更新現有評論
+      await octokit.rest.issues.updateComment({
+        owner,
+        repo,
+        comment_id: existingComment.id,
+        body: commentBody
+      });
+      core.info(`已更新 PR #${prNumber} 的 AI 分析評論`);
+      return existingComment.id;
+    } else {
+      // 創建新評論
+      const { data } = await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: commentBody
+      });
+      core.info(`已在 PR #${prNumber} 中創建 AI 分析評論`);
+      return data.id;
+    }
+  } catch (error) {
+    core.error(`發送 AI 評論失敗: ${error instanceof Error ? error.message : String(error)}`);
+    throw error;
+  }
+}
+
+/**
+ * 格式化 AI 評論內容
+ */
+function formatAICommentBody(aiReport, provider, model) {
+  const providerNames = {
+    openai: 'OpenAI',
+    anthropic: 'Anthropic Claude',
+    gemini: 'Google Gemini'
+  };
+
+  const providerName = providerNames[provider] || provider;
+  const modelDisplay = model || '預設模型';
+
+  let body = '<!-- dev-advisor-mcp -->\n\n';
+  body += '# 🤖 AI 程式碼審查報告\n\n';
+  body += `> 此報告由 [Dev Advisor MCP](https://github.com/mukiwu/dev-advisor-mcp) 使用 ${providerName} (${modelDisplay}) 自動生成\n\n`;
+  body += '---\n\n';
+
+  // 添加 AI 報告內容
+  if (aiReport.length > MAX_COMMENT_LENGTH - body.length - 200) {
+    const truncated = aiReport.substring(0, MAX_COMMENT_LENGTH - body.length - 200);
+    body += truncated;
+    body += '\n\n---\n\n';
+    body += '> ⚠️ 報告內容過長，已截斷。\n';
+  } else {
+    body += aiReport;
+  }
+
+  body += '\n\n---\n';
+  body += `*此評論由 [Dev Advisor MCP](https://github.com/mukiwu/dev-advisor-mcp) 自動生成*\n`;
+
+  return body;
+}
