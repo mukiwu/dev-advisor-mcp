@@ -6,48 +6,8 @@
  */
 
 import * as core from '@actions/core';
-import * as github from '@actions/github';
-import { existsSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// 檢查並構建 dist（如果需要）
-function ensureDistBuilt() {
-  const distPath = resolve(__dirname, '../dist');
-  if (!existsSync(distPath)) {
-    core.info('📦 dist 目錄不存在，開始構建...');
-    try {
-      // 先檢查是否有 package.json
-      const packageJsonPath = resolve(__dirname, '../package.json');
-      if (!existsSync(packageJsonPath)) {
-        throw new Error('找不到 package.json，無法構建專案');
-      }
-      
-      execSync('npm run build', { 
-        cwd: resolve(__dirname, '..'),
-        stdio: 'inherit',
-        env: { ...process.env, NODE_ENV: 'production' }
-      });
-      core.info('✅ 構建完成');
-    } catch (error) {
-      core.setFailed(`構建失敗: ${error instanceof Error ? error.message : String(error)}`);
-      throw error;
-    }
-  } else {
-    core.info('✅ dist 目錄已存在，跳過構建');
-  }
-}
-
-// 確保 dist 已構建（在導入分析器之前）
-ensureDistBuilt();
-
-// 動態導入分析器（在確保 dist 已構建後）
-const { runAllAnalyses } = await import('./analyzer.js');
-const { commentOnPR } = await import('./commenter.js');
+import { runAllAnalyses } from './analyzer.js';
+import { commentOnPR } from './commenter.js';
 
 async function main() {
   try {
@@ -143,4 +103,3 @@ async function main() {
 
 // 執行主函數
 main();
-

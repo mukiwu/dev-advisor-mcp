@@ -61,4 +61,4 @@ outputs:
 
 runs:
   using: 'node20'
-  main: 'action/dist/index.js'
+  main: 'action/dist/index.cjs'
