@@ -51,6 +51,8 @@ npm run build
 
 在您的專案中創建 `.github/workflows/dev-advisor.yml`：
 
+#### 規則式分析（預設）
+
 ```yaml
 name: Dev Advisor Check
 
@@ -77,6 +79,35 @@ jobs:
           project-path: '.'
           enable-modernization: true
           enable-compatibility: true
+          comment-on-pr: true
+```
+
+#### AI 分析模式（推薦）
+
+使用 AI 分析 PR 變更的程式碼，提供更智慧的現代化建議：
+
+```yaml
+name: Dev Advisor AI Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: mukiwu/dev-advisor-mcp@v1
+        with:
+          ai-enabled: true
+          ai-provider: 'openai'  # 或 anthropic、gemini
+          ai-api-key: ${{ secrets.OPENAI_API_KEY }}
           comment-on-pr: true
 ```
 
