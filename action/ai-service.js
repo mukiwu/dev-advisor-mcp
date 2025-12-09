@@ -132,7 +132,34 @@ const PROVIDERS = {
         }
       }
     }),
-    parseResponse: (response) => response.candidates[0].content.parts[0].text
+    parseResponse: (response) => {
+      // 檢查回應結構
+      if (!response.candidates || response.candidates.length === 0) {
+        throw new Error('Gemini 回應中沒有 candidates');
+      }
+
+      const candidate = response.candidates[0];
+
+      // 檢查是否有 content
+      if (!candidate.content || !candidate.content.parts || candidate.content.parts.length === 0) {
+        // 檢查是否有錯誤訊息
+        if (candidate.finishReason === 'SAFETY') {
+          throw new Error('Gemini 因安全性原因拒絕回應');
+        }
+        throw new Error(`Gemini 回應格式異常: ${JSON.stringify(candidate)}`);
+      }
+
+      // 合併所有文字 parts
+      const textParts = candidate.content.parts
+        .filter(part => part.text)
+        .map(part => part.text);
+
+      if (textParts.length === 0) {
+        throw new Error('Gemini 回應中沒有文字內容');
+      }
+
+      return textParts.join('\n');
+    }
   }
 };
 
