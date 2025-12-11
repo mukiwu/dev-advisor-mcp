@@ -1,0 +1,22 @@
+name: Dev Advisor AI Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: mukiwu/dev-advisor-mcp@v1
+        with:
+          ai-enabled: true
+          ai-provider: 'gemini'
+          ai-api-key: ${{ secrets.GEMINI_API_KEY }}
+          comment-on-pr: true
