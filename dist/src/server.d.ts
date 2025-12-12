@@ -12,6 +12,7 @@ declare class DevAdvisorServer {
     private rules;
     private mdnService;
     private canIUseService;
+    private baselineService;
     private apiKnowledge;
     constructor();
     private setupHandlers;
@@ -54,6 +55,10 @@ declare class DevAdvisorServer {
      * 取得狀態文字
      */
     private getStatusText;
+    /**
+     * 處理 Baseline 狀態檢查請求
+     */
+    private handleBaselineStatusCheck;
     private formatModernizationReport;
     /**
      * 設定 Resources 處理器

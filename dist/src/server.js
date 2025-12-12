@@ -11,6 +11,7 @@ import { ReportFormatter } from './utils/report-formatter.js';
 import { ModernizationRules } from './data/modernization-rules.js';
 import { MDNService } from './services/mdn-service.js';
 import { CanIUseService } from './services/caniuse-service.js';
+import { BaselineService } from './services/baseline-service.js';
 import { ApiRecommendationKnowledge } from './data/api-recommendations.js';
 /**
  * 驗證錯誤類別
@@ -34,6 +35,7 @@ class DevAdvisorServer {
     rules;
     mdnService;
     canIUseService;
+    baselineService;
     apiKnowledge;
     constructor() {
         this.server = new Server({
@@ -48,6 +50,7 @@ class DevAdvisorServer {
         });
         this.codeParser = new CodeParser();
         this.canIUseService = new CanIUseService();
+        this.baselineService = new BaselineService();
         this.modernizationAnalyzer = new ModernizationAnalyzer(this.codeParser);
         this.compatibilityAnalyzer = new CompatibilityAnalyzer(this.codeParser, this.canIUseService);
         this.reportFormatter = new ReportFormatter();
@@ -187,6 +190,20 @@ class DevAdvisorServer {
                             required: ['feature'],
                         },
                     },
+                    {
+                        name: 'check_baseline_status',
+                        description: '查詢 Web API 的 Baseline 狀態（Limited/Newly/Widely available），判斷功能是否可在所有核心瀏覽器中安全使用',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                feature: {
+                                    type: 'string',
+                                    description: 'Web API 功能名稱或 ID，如 "fetch", "IntersectionObserver", "css-grid"',
+                                }
+                            },
+                            required: ['feature'],
+                        },
+                    },
                 ],
             };
         });
@@ -202,6 +219,8 @@ class DevAdvisorServer {
                     return await this.handleMDNSearch(request.params.arguments);
                 case 'check_browser_support':
                     return await this.handleBrowserSupportCheck(request.params.arguments);
+                case 'check_baseline_status':
+                    return await this.handleBaselineStatusCheck(request.params.arguments);
                 default:
                     throw new Error(`Unknown tool: ${request.params.name}`);
             }
@@ -406,6 +425,7 @@ class DevAdvisorServer {
         const results = [];
         for (const api of apis) {
             let compatibility = null;
+            let baseline = null;
             try {
                 // 使用 Can I Use 查詢相容性
                 const report = await this.canIUseService.checkCompatibility(api.caniuseId, targetBrowsers);
@@ -414,7 +434,27 @@ class DevAdvisorServer {
             catch (error) {
                 console.warn(`無法取得 ${api.name} 的相容性資料:`, error);
             }
-            results.push({ api, compatibility });
+            // 查詢 Baseline 狀態
+            try {
+                const baselineMatches = await this.baselineService.searchFeature(api.name);
+                if (baselineMatches.length > 0) {
+                    const baselineFeature = await this.baselineService.getFeature(baselineMatches[0].id) || baselineMatches[0];
+                    if (baselineFeature.baseline) {
+                        baseline = {
+                            status: baselineFeature.baseline.status,
+                            label: this.baselineService.getBaselineLabel(baselineFeature.baseline.status),
+                            description: this.baselineService.getBaselineDescription(baselineFeature.baseline.status),
+                            icon: this.baselineService.getBaselineIcon(baselineFeature.baseline.status),
+                            safeToUse: this.baselineService.isSafeToUse(baselineFeature),
+                            recommendation: this.baselineService.getRecommendation(baselineFeature)
+                        };
+                    }
+                }
+            }
+            catch (error) {
+                console.warn(`無法取得 ${api.name} 的 Baseline 狀態:`, error);
+            }
+            results.push({ api, compatibility, baseline });
         }
         return results;
     }
@@ -442,14 +482,27 @@ class DevAdvisorServer {
         report += `共找到 **${apiWithCompatibility.length}** 個相關 API：\n\n`;
         for (const [category, items] of byCategory) {
             report += `### 📁 ${category}\n\n`;
-            for (const { api, compatibility } of items) {
+            for (const { api, compatibility, baseline } of items) {
                 // API 標題和支援狀態
                 const supportIcon = compatibility
                     ? (compatibility.notSupported.length === 0 ? '✅' :
                         compatibility.supported.length > 0 ? '⚠️' : '❌')
                     : '❓';
-                report += `#### ${supportIcon} ${api.name}\n\n`;
+                // 如果有 Baseline 狀態，優先使用 Baseline 圖示
+                const displayIcon = baseline ? baseline.icon : supportIcon;
+                report += `#### ${displayIcon} ${api.name}\n\n`;
                 report += `${api.description}\n\n`;
+                // Baseline 狀態
+                if (baseline) {
+                    report += `**📊 Baseline 狀態**: ${baseline.icon} **${baseline.label}**\n\n`;
+                    report += `${baseline.description}\n\n`;
+                    if (baseline.safeToUse) {
+                        report += `✅ **可安全使用** - 此 API 在所有核心瀏覽器中都支援\n\n`;
+                    }
+                    else {
+                        report += `⚠️ **需謹慎使用** - 建議檢查目標瀏覽器支援情況\n\n`;
+                    }
+                }
                 // 用途
                 report += `**適用場景**: ${api.useCases.join('、')}\n\n`;
                 // 程式碼範例
@@ -675,17 +728,38 @@ class DevAdvisorServer {
             }
             // 檢查相容性
             const compatReport = await this.canIUseService.checkCompatibility(matches[0], targetBrowsers);
+            // 嘗試取得 Baseline 狀態
+            let baselineInfo = null;
+            try {
+                const baselineMatches = await this.baselineService.searchFeature(feature);
+                if (baselineMatches.length > 0) {
+                    baselineInfo = await this.baselineService.getFeature(baselineMatches[0].id) || baselineMatches[0];
+                }
+            }
+            catch (error) {
+                console.warn('無法取得 Baseline 狀態:', error);
+            }
             // 格式化報告
             let report = `# 🌐 瀏覽器相容性報告: ${featureSupport.title}\n\n`;
             report += `## 📊 概覽\n\n`;
             report += `- **功能**: ${featureSupport.title}\n`;
             report += `- **全球支援率**: ${compatReport.globalSupport.toFixed(1)}%\n`;
             report += `- **狀態**: ${this.getStatusText(featureSupport.status)}\n`;
+            // 添加 Baseline 狀態
+            if (baselineInfo?.baseline) {
+                report += `- **Baseline**: ${this.baselineService.getBaselineIcon(baselineInfo.baseline.status)} ${this.baselineService.getBaselineLabel(baselineInfo.baseline.status)}\n`;
+            }
             if (featureSupport.description) {
                 report += `\n### 說明\n${featureSupport.description}\n`;
             }
             report += `\n## 🎯 目標瀏覽器相容性\n\n`;
             report += `${compatReport.recommendation}\n\n`;
+            // 添加 Baseline 建議
+            if (baselineInfo?.baseline) {
+                report += `## 📊 Baseline 狀態\n\n`;
+                report += this.baselineService.formatBaselineInfo(baselineInfo);
+                report += `\n${this.baselineService.getRecommendation(baselineInfo)}\n\n`;
+            }
             if (compatReport.supported.length > 0) {
                 report += `### ✅ 支援的瀏覽器\n`;
                 for (const browser of compatReport.supported) {
@@ -785,6 +859,116 @@ class DevAdvisorServer {
             'other': '📌 其他'
         };
         return statusMap[status] || status;
+    }
+    /**
+     * 處理 Baseline 狀態檢查請求
+     */
+    async handleBaselineStatusCheck(args) {
+        try {
+            if (!args || typeof args !== 'object') {
+                throw new ValidationError('參數格式錯誤');
+            }
+            const { feature } = args;
+            if (typeof feature !== 'string' || !feature.trim()) {
+                throw new ValidationError('feature 為必填欄位，請提供要檢查的 Web API 功能名稱');
+            }
+            // 搜尋功能
+            const matches = await this.baselineService.searchFeature(feature);
+            if (matches.length === 0) {
+                return {
+                    content: [{
+                            type: 'text',
+                            text: `🔍 Baseline 查詢結果\n\n找不到與 "${feature}" 相關的功能。\n\n建議：\n- 嘗試使用不同的關鍵字\n- 使用功能 ID（如 "fetch-api", "intersection-observer"）\n- 查閱 [web.dev/baseline](https://web.dev/baseline) 取得完整列表`
+                        }]
+                };
+            }
+            // 取得第一個匹配的詳細資訊
+            const featureInfo = await this.baselineService.getFeature(matches[0].id) || matches[0];
+            // 格式化報告
+            let report = `# 📊 Baseline 狀態報告: ${featureInfo.name}\n\n`;
+            if (featureInfo.description) {
+                report += `**說明**: ${featureInfo.description}\n\n`;
+            }
+            if (featureInfo.category) {
+                report += `**類別**: ${featureInfo.category}\n\n`;
+            }
+            report += `---\n\n`;
+            // Baseline 狀態
+            if (featureInfo.baseline) {
+                report += `## 🎯 Baseline 狀態\n\n`;
+                report += this.baselineService.formatBaselineInfo(featureInfo);
+                report += `\n${this.baselineService.getRecommendation(featureInfo)}\n\n`;
+            }
+            else {
+                report += `## 🎯 Baseline 狀態\n\n`;
+                report += `❓ 此功能尚未有 Baseline 狀態資訊\n\n`;
+                report += `建議查閱 [Can I Use](https://caniuse.com) 或 [MDN](https://developer.mozilla.org) 確認相容性。\n\n`;
+            }
+            // 瀏覽器相容性資訊
+            if (featureInfo.compat) {
+                report += `## 🌐 瀏覽器支援\n\n`;
+                const compat = featureInfo.compat;
+                if (compat.chrome) {
+                    const since = compat.chrome.since || '未知';
+                    const flags = compat.chrome.flags ? ' (需要啟用實驗性功能)' : '';
+                    report += `- **Chrome**: ${since}${flags}\n`;
+                }
+                if (compat.firefox) {
+                    const since = compat.firefox.since || '未知';
+                    const flags = compat.firefox.flags ? ' (需要啟用實驗性功能)' : '';
+                    report += `- **Firefox**: ${since}${flags}\n`;
+                }
+                if (compat.safari) {
+                    const since = compat.safari.since || '未知';
+                    const flags = compat.safari.flags ? ' (需要啟用實驗性功能)' : '';
+                    report += `- **Safari**: ${since}${flags}\n`;
+                }
+                if (compat.edge) {
+                    const since = compat.edge.since || '未知';
+                    const flags = compat.edge.flags ? ' (需要啟用實驗性功能)' : '';
+                    report += `- **Edge**: ${since}${flags}\n`;
+                }
+                report += '\n';
+            }
+            // 相關連結
+            report += `## 🔗 相關連結\n\n`;
+            if (featureInfo.mdn?.url) {
+                report += `- [MDN 文件](${featureInfo.mdn.url})\n`;
+            }
+            if (featureInfo.spec?.url) {
+                report += `- [規範文件](${featureInfo.spec.url})\n`;
+            }
+            if (featureInfo.caniuse) {
+                report += `- [Can I Use](https://caniuse.com/${featureInfo.caniuse})\n`;
+            }
+            report += `- [Baseline 狀態](https://web.dev/baseline)\n`;
+            // 如果找到多個匹配，列出其他選項
+            if (matches.length > 1) {
+                report += `\n## 🔍 其他相關功能\n\n`;
+                report += `您可能也在尋找：\n`;
+                for (const match of matches.slice(1, 6)) {
+                    const baselineStatus = match.baseline
+                        ? `${this.baselineService.getBaselineIcon(match.baseline.status)} ${this.baselineService.getBaselineLabel(match.baseline.status)}`
+                        : '❓ 未知';
+                    report += `- **${match.name}** (${baselineStatus})\n`;
+                }
+            }
+            return {
+                content: [{
+                        type: 'text',
+                        text: report
+                    }]
+            };
+        }
+        catch (error) {
+            const errorMessage = error instanceof ValidationError
+                ? `參數驗證失敗: ${error.message}`
+                : `Baseline 狀態檢查失敗: ${error instanceof Error ? error.message : String(error)}`;
+            return {
+                content: [{ type: 'text', text: errorMessage }],
+                isError: true,
+            };
+        }
     }
     formatModernizationReport(analysis, format = 'markdown') {
         return this.reportFormatter.formatModernizationReport(analysis, format);
