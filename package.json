@@ -1,6 +1,6 @@
 {
   "name": "@mukiwu/dev-advisor-mcp",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "開發決策顧問 MCP Server - 協助程式碼現代化、API 組合推薦和相容性分析",
   "main": "dist/src/server.js",
   "type": "module",
