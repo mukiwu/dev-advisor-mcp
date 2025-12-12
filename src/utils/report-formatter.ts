@@ -31,8 +31,15 @@ export class ReportFormatter {
   /**
    * 格式化為 Markdown 報告
    */
-  private formatMarkdownReport(analysis: ModernizationAnalysis): string {
+  private formatMarkdownReport(analysis: ModernizationAnalysis & {
+    categoryInfo?: {
+      totalCategories: number;
+      apiCategories: Record<string, string[]>;
+      allCategories: Array<{ name: string; count: number; description?: string }>;
+    }
+  }): string {
     const { summary, suggestions, fileAnalysis, riskAssessment } = analysis;
+    const categoryInfo = (analysis as any).categoryInfo;
 
     let report = '# 程式碼現代化分析報告\n\n';
 
@@ -42,6 +49,49 @@ export class ReportFormatter {
     report += `- **發現建議數量**: ${summary.totalSuggestions} 項\n`;
     report += `- **潛在效能提升**: ${summary.potentialPerformanceGain}%\n`;
     report += `- **檔案大小減少**: ${summary.bundleSizeReduction}KB\n\n`;
+
+    // API 類別分析（如果有的話）
+    if (categoryInfo) {
+      report += '## 📋 API 類別分析\n\n';
+      report += `本分析基於 Can I Use 資料庫中的 **${categoryInfo.totalCategories}** 個可用 API 類別。\n\n`;
+
+      // 顯示專案中使用的現代 API 及其類別
+      const apiCategories = categoryInfo.apiCategories || {};
+      if (Object.keys(apiCategories).length > 0) {
+        report += '### 🎯 專案中使用的現代 API 類別\n\n';
+
+        // 統計每個類別出現的次數
+        const categoryCount = new Map<string, number>();
+        for (const categories of Object.values(apiCategories) as string[][]) {
+          for (const cat of categories) {
+            categoryCount.set(cat, (categoryCount.get(cat) || 0) + 1);
+          }
+        }
+
+        // 按出現次數排序
+        const sortedCategories = Array.from(categoryCount.entries())
+          .sort((a, b) => b[1] - a[1]);
+
+        for (const [category, count] of sortedCategories) {
+          const catInfo = categoryInfo.allCategories?.find((c: any) => c.name === category);
+          report += `- **${category}**: ${count} 個 API`;
+          if (catInfo) {
+            report += ` (Can I Use 資料庫中共有 ${catInfo.count} 個功能)`;
+          }
+          report += '\n';
+        }
+        report += '\n';
+
+        // 列出每個 API 及其類別
+        report += '### 📝 現代 API 詳細類別\n\n';
+        for (const [apiName, categories] of Object.entries(apiCategories)) {
+          report += `- **${apiName}**: ${(categories as string[]).join(', ')}\n`;
+        }
+        report += '\n';
+      }
+
+      report += '---\n\n';
+    }
 
     // 風險評估
     report += '## ⚠️ 風險評估\n\n';

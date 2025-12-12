@@ -30,6 +30,10 @@ declare class DevAdvisorServer {
     private validateCompatibilityArgs;
     private handleApiRecommendation;
     /**
+     * 匹配類別關鍵字
+     */
+    private matchCategoryKeywords;
+    /**
      * 解析目標瀏覽器版本
      */
     private parseBrowserVersions;
@@ -50,6 +54,10 @@ declare class DevAdvisorServer {
      * 處理瀏覽器支援檢查請求
      */
     private handleBrowserSupportCheck;
+    /**
+     * 處理列出所有 API 類別的請求
+     */
+    private handleListApiCategories;
     /**
      * 取得狀態文字
      */

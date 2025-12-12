@@ -187,6 +187,15 @@ class DevAdvisorServer {
                             required: ['feature'],
                         },
                     },
+                    {
+                        name: 'list_api_categories',
+                        description: '列出所有可用的 Web API 類別，從 Can I Use 資料庫中取得完整的類別列表',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {},
+                            required: [],
+                        },
+                    },
                 ],
             };
         });
@@ -202,6 +211,8 @@ class DevAdvisorServer {
                     return await this.handleMDNSearch(request.params.arguments);
                 case 'check_browser_support':
                     return await this.handleBrowserSupportCheck(request.params.arguments);
+                case 'list_api_categories':
+                    return await this.handleListApiCategories(request.params.arguments);
                 default:
                     throw new Error(`Unknown tool: ${request.params.name}`);
             }
@@ -253,15 +264,83 @@ class DevAdvisorServer {
             // 驗證輸入參數
             const validatedArgs = this.validateModernizationArgs(args);
             const { projectPath, includePatterns = ['**/*.js', '**/*.ts', '**/*.jsx', '**/*.tsx'], excludePatterns = ['node_modules/**', 'dist/**', 'build/**'], reportFormat = 'markdown' } = validatedArgs;
-            const analysis = await this.modernizationAnalyzer.analyze(projectPath, includePatterns, excludePatterns);
-            return {
-                content: [
-                    {
-                        type: 'text',
-                        text: this.formatModernizationReport(analysis, reportFormat),
-                    },
-                ],
-            };
+            // 步驟 1: 先取得所有可用的 API 類別
+            let allCategories = [];
+            let apiCategoryMap = new Map(); // API 名稱 -> 類別列表
+            try {
+                allCategories = await this.canIUseService.getAllCategories();
+                // 步驟 2: 分析專案中的現代化 API，找出它們的類別
+                const analysis = await this.modernizationAnalyzer.analyze(projectPath, includePatterns, excludePatterns);
+                // 收集所有提到的現代 API
+                const modernApis = new Set();
+                for (const file of analysis.fileAnalysis) {
+                    for (const api of file.modernizableApis) {
+                        modernApis.add(api.modernApi);
+                    }
+                }
+                // 為每個現代 API 找出對應的類別
+                for (const apiName of modernApis) {
+                    const categories = [];
+                    // 從知識庫中查找 API
+                    const api = this.apiKnowledge.getApi(apiName);
+                    if (api) {
+                        categories.push(api.category);
+                    }
+                    else {
+                        // 如果知識庫中沒有，嘗試從 Can I Use 資料庫查找
+                        try {
+                            // 嘗試搜尋 feature ID
+                            const featureIds = await this.canIUseService.searchFeature(apiName);
+                            if (featureIds.length > 0) {
+                                const featureSupport = await this.canIUseService.getFeatureSupport(featureIds[0]);
+                                if (featureSupport && featureSupport.categories) {
+                                    categories.push(...featureSupport.categories);
+                                }
+                            }
+                        }
+                        catch (error) {
+                            // 忽略錯誤，繼續處理下一個 API
+                        }
+                    }
+                    if (categories.length > 0) {
+                        apiCategoryMap.set(apiName, categories);
+                    }
+                }
+                // 將類別資訊添加到分析結果中
+                const enhancedAnalysis = {
+                    ...analysis,
+                    categoryInfo: {
+                        totalCategories: allCategories.length,
+                        apiCategories: Object.fromEntries(apiCategoryMap),
+                        allCategories: allCategories.map(cat => ({
+                            name: cat.name,
+                            count: cat.count,
+                            description: cat.description
+                        }))
+                    }
+                };
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: this.formatModernizationReport(enhancedAnalysis, reportFormat),
+                        },
+                    ],
+                };
+            }
+            catch (categoryError) {
+                // 如果取得類別失敗，仍然返回分析結果（不包含類別資訊）
+                console.warn('無法取得類別資訊，將返回不含類別的分析結果:', categoryError);
+                const analysis = await this.modernizationAnalyzer.analyze(projectPath, includePatterns, excludePatterns);
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: this.formatModernizationReport(analysis, reportFormat),
+                        },
+                    ],
+                };
+            }
         }
         catch (error) {
             const errorMessage = error instanceof ValidationError
@@ -343,22 +422,88 @@ class DevAdvisorServer {
         try {
             const validatedArgs = this.validateApiRecommendationArgs(args);
             const { requirement, targetBrowsers, performanceRequirements } = validatedArgs;
-            // 從知識庫中推薦 API
+            // 步驟 1: 先取得所有可用的 API 類別
+            let allCategories = [];
+            let matchedCategories = [];
+            try {
+                allCategories = await this.canIUseService.getAllCategories();
+                // 根據需求描述匹配相關的類別
+                const lowerReq = requirement.toLowerCase();
+                matchedCategories = allCategories
+                    .filter(cat => {
+                    const catName = cat.name.toLowerCase();
+                    const catDesc = (cat.description || '').toLowerCase();
+                    return lowerReq.includes(catName) ||
+                        catName.includes(lowerReq) ||
+                        catDesc.includes(lowerReq) ||
+                        this.matchCategoryKeywords(lowerReq, cat.name);
+                })
+                    .map(cat => cat.name);
+            }
+            catch (error) {
+                console.warn('無法取得類別列表，將使用預定義知識庫:', error);
+            }
+            // 步驟 2: 從匹配的類別中找出相關的 API
+            const apisFromCategories = new Set();
+            for (const category of matchedCategories) {
+                try {
+                    const featureIds = await this.canIUseService.getFeaturesByCategory(category);
+                    // 將 feature ID 轉換為 API 名稱（如果知識庫中有對應的）
+                    for (const featureId of featureIds.slice(0, 10)) { // 限制每個類別最多 10 個
+                        const api = this.apiKnowledge.getApiByCaniuseId(featureId);
+                        if (api) {
+                            apisFromCategories.add(api.name);
+                        }
+                    }
+                }
+                catch (error) {
+                    console.warn(`無法取得類別 ${category} 的 API:`, error);
+                }
+            }
+            // 步驟 3: 從知識庫中推薦 API（原有邏輯）
             const recommendedApis = this.apiKnowledge.recommendApis(requirement, performanceRequirements);
-            if (recommendedApis.length === 0) {
+            // 步驟 4: 合併結果，優先使用知識庫的推薦，補充類別匹配的結果
+            const apiMap = new Map();
+            // 先加入知識庫推薦的 API
+            for (const api of recommendedApis) {
+                apiMap.set(api.name, api);
+            }
+            // 補充從類別匹配找到的 API（如果不在知識庫推薦中）
+            for (const apiName of apisFromCategories) {
+                const api = this.apiKnowledge.getApi(apiName);
+                if (api && !apiMap.has(apiName)) {
+                    // 檢查是否符合需求描述
+                    const lowerReq = requirement.toLowerCase();
+                    if (api.description.toLowerCase().includes(lowerReq) ||
+                        api.useCases.some(uc => lowerReq.includes(uc.toLowerCase()))) {
+                        apiMap.set(apiName, api);
+                    }
+                }
+            }
+            const finalRecommendedApis = Array.from(apiMap.values());
+            if (finalRecommendedApis.length === 0) {
+                let suggestionText = `# 🔍 API 推薦結果\n\n找不到與「${requirement}」相關的 API 推薦。\n\n`;
+                if (matchedCategories.length > 0) {
+                    suggestionText += `**相關類別**: ${matchedCategories.join(', ')}\n\n`;
+                }
+                suggestionText += `**建議：**\n`;
+                suggestionText += `- 嘗試使用更具體的描述\n`;
+                suggestionText += `- 使用英文關鍵字（如 fetch, animation, storage）\n`;
+                suggestionText += `- 描述具體的使用場景\n`;
+                suggestionText += `- 使用 \`list_api_categories\` 工具查看所有可用的 API 類別\n`;
                 return {
                     content: [{
                             type: 'text',
-                            text: `# 🔍 API 推薦結果\n\n找不到與「${requirement}」相關的 API 推薦。\n\n**建議：**\n- 嘗試使用更具體的描述\n- 使用英文關鍵字（如 fetch, animation, storage）\n- 描述具體的使用場景`
+                            text: suggestionText
                         }]
                 };
             }
             // 解析目標瀏覽器版本
             const browserVersions = this.parseBrowserVersions(targetBrowsers);
             // 為每個推薦的 API 查詢相容性
-            const apiWithCompatibility = await this.fetchApiCompatibility(recommendedApis, browserVersions);
-            // 生成報告
-            const report = this.generateApiRecommendationReport(requirement, apiWithCompatibility, browserVersions, performanceRequirements);
+            const apiWithCompatibility = await this.fetchApiCompatibility(finalRecommendedApis, browserVersions);
+            // 生成報告（包含類別資訊）
+            const report = this.generateApiRecommendationReport(requirement, apiWithCompatibility, browserVersions, performanceRequirements, matchedCategories, allCategories.length);
             return {
                 content: [{
                         type: 'text',
@@ -375,6 +520,27 @@ class DevAdvisorServer {
                 isError: true,
             };
         }
+    }
+    /**
+     * 匹配類別關鍵字
+     */
+    matchCategoryKeywords(requirement, categoryName) {
+        const categoryKeywords = {
+            'CSS': ['css', '樣式', 'style', 'layout', '佈局', 'grid', 'flex'],
+            'JavaScript': ['javascript', 'js', 'api', 'function', '函式'],
+            'HTML': ['html', 'element', '元素', 'tag', '標籤'],
+            'Media': ['media', 'video', 'audio', '影片', '音訊', 'stream', 'streaming'],
+            'Storage': ['storage', 'store', '儲存', 'cache', '快取', 'database', '資料庫'],
+            'Network': ['network', 'http', 'fetch', 'request', '請求', 'ajax'],
+            'Security': ['security', 'crypto', '加密', 'secure', '安全'],
+            'Performance': ['performance', '效能', 'speed', 'optimize', '優化'],
+            'Graphics': ['graphics', 'canvas', 'webgl', 'draw', '繪圖', '圖形'],
+            'DOM': ['dom', 'element', '元素', 'query', 'selector', '選擇器'],
+            'Events': ['event', '事件', 'listener', '監聽'],
+            'Forms': ['form', '表單', 'input', 'validate', '驗證']
+        };
+        const keywords = categoryKeywords[categoryName] || [];
+        return keywords.some(keyword => requirement.includes(keyword));
     }
     /**
      * 解析目標瀏覽器版本
@@ -421,12 +587,19 @@ class DevAdvisorServer {
     /**
      * 生成 API 推薦報告
      */
-    generateApiRecommendationReport(requirement, apiWithCompatibility, targetBrowsers, performanceLevel) {
+    generateApiRecommendationReport(requirement, apiWithCompatibility, targetBrowsers, performanceLevel, matchedCategories, totalCategoriesCount) {
         let report = `# 🎯 API 組合推薦\n\n`;
         report += `**需求**: ${requirement}\n`;
         report += `**目標瀏覽器**: ${Object.entries(targetBrowsers).map(([b, v]) => `${b} >= ${v}`).join(', ')}\n`;
         if (performanceLevel) {
             report += `**效能需求**: ${performanceLevel}\n`;
+        }
+        // 顯示類別分析資訊
+        if (matchedCategories && matchedCategories.length > 0) {
+            report += `**相關類別**: ${matchedCategories.join(', ')}\n`;
+        }
+        if (totalCategoriesCount) {
+            report += `**可用類別總數**: ${totalCategoriesCount} 個（從 Can I Use 資料庫分析）\n`;
         }
         report += `\n---\n\n`;
         // 按類別分組
@@ -493,6 +666,17 @@ class DevAdvisorServer {
         }
         // 總結建議
         report += `## 💡 實作建議\n\n`;
+        // 添加類別分析說明
+        if (matchedCategories && matchedCategories.length > 0) {
+            report += `### 📊 類別分析\n\n`;
+            report += `本推薦基於以下分析流程：\n\n`;
+            report += `1. ✅ 從 Can I Use 資料庫取得所有 ${totalCategoriesCount || '可用'} 個 API 類別\n`;
+            report += `2. ✅ 根據需求描述匹配相關類別：**${matchedCategories.join('**, **')}**\n`;
+            report += `3. ✅ 從匹配類別中找出相關 API\n`;
+            report += `4. ✅ 結合預定義知識庫的推薦結果\n`;
+            report += `5. ✅ 查詢瀏覽器相容性並生成最終推薦\n\n`;
+            report += `---\n\n`;
+        }
         const fullySupported = apiWithCompatibility.filter(item => item.compatibility && item.compatibility.notSupported.length === 0);
         const needsPolyfill = apiWithCompatibility.filter(item => item.compatibility && item.compatibility.notSupported.length > 0 && item.compatibility.polyfillAvailable);
         const notSupported = apiWithCompatibility.filter(item => item.compatibility && item.compatibility.notSupported.length > 0 && !item.compatibility.polyfillAvailable);
@@ -768,6 +952,61 @@ class DevAdvisorServer {
                 : `瀏覽器支援檢查失敗: ${error instanceof Error ? error.message : String(error)}`;
             return {
                 content: [{ type: 'text', text: errorMessage }],
+                isError: true,
+            };
+        }
+    }
+    /**
+     * 處理列出所有 API 類別的請求
+     */
+    async handleListApiCategories(args) {
+        try {
+            const categories = await this.canIUseService.getAllCategories();
+            if (categories.length === 0) {
+                return {
+                    content: [{
+                            type: 'text',
+                            text: '# 📋 API 類別列表\n\n無法載入類別資料，請稍後再試。'
+                        }]
+                };
+            }
+            // 生成報告
+            let report = '# 📋 Web API 類別列表\n\n';
+            report += `本列表包含從 Can I Use 資料庫中提取的所有 Web API 類別。\n\n`;
+            report += `**總共 ${categories.length} 個類別**\n\n`;
+            report += `---\n\n`;
+            // 按類別分組顯示
+            for (const category of categories) {
+                report += `## ${category.name}\n\n`;
+                report += `- **功能數量**: ${category.count}\n`;
+                if (category.description) {
+                    report += `- **說明**: ${category.description}\n`;
+                }
+                report += '\n';
+            }
+            // 添加使用建議
+            report += `---\n\n`;
+            report += `## 💡 使用建議\n\n`;
+            report += `您可以使用以下方式查詢特定類別的 API：\n\n`;
+            report += `1. 使用 \`recommend_api_combination\` 工具，描述您的需求\n`;
+            report += `2. 使用 \`search_mdn\` 工具搜尋特定的 API\n`;
+            report += `3. 使用 \`check_browser_support\` 工具檢查特定 API 的瀏覽器支援\n\n`;
+            report += `**注意**: \`recommend_api_combination\` 工具目前使用預定義的 API 知識庫，`;
+            report += `類別可能與此列表不完全一致。此列表反映 Can I Use 資料庫中的實際類別分類。\n`;
+            return {
+                content: [{
+                        type: 'text',
+                        text: report
+                    }]
+            };
+        }
+        catch (error) {
+            const errorMessage = `取得 API 類別列表失敗: ${error instanceof Error ? error.message : String(error)}`;
+            return {
+                content: [{
+                        type: 'text',
+                        text: errorMessage
+                    }],
                 isError: true,
             };
         }

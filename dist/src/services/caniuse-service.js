@@ -330,6 +330,61 @@ export class CanIUseService {
         }
         return matches;
     }
+    /**
+     * 取得所有可用的 API 類別
+     * 從 Can I Use 資料庫中提取所有唯一的類別
+     */
+    async getAllCategories() {
+        const data = await this.loadData();
+        const features = data.data || {};
+        // 統計每個類別的功能數量
+        const categoryMap = new Map();
+        for (const [, feature] of Object.entries(features)) {
+            const categories = feature.categories || [];
+            for (const category of categories) {
+                const count = categoryMap.get(category) || 0;
+                categoryMap.set(category, count + 1);
+            }
+        }
+        // 轉換為陣列並排序
+        const categories = Array.from(categoryMap.entries())
+            .map(([name, count]) => ({
+            name,
+            count,
+            description: this.getCategoryDescription(name)
+        }))
+            .sort((a, b) => b.count - a.count); // 按數量降序排列
+        return categories;
+    }
+    /**
+     * 取得類別的描述
+     */
+    getCategoryDescription(category) {
+        const descriptions = {
+            'CSS': 'CSS 相關功能，包括佈局、動畫、選擇器等',
+            'HTML': 'HTML 元素和屬性',
+            'JavaScript': 'JavaScript API 和語言特性',
+            'SVG': 'SVG 圖形相關功能',
+            'Canvas': 'Canvas 繪圖 API',
+            'Security': '安全性相關 API',
+            'Performance': '效能相關 API',
+            'Network': '網路請求相關 API',
+            'Storage': '資料儲存相關 API',
+            'Media': '媒體處理相關 API（音訊、視訊）',
+            'Graphics': '圖形渲染相關 API',
+            'DOM': 'DOM 操作相關 API',
+            'Events': '事件處理相關 API',
+            'Forms': '表單相關 API',
+            'Mobile': '行動裝置相關功能',
+            'Other': '其他功能',
+            'JS API': 'JavaScript API',
+            'Misc': '雜項功能',
+            'APIs': 'Web API',
+            'HTML5': 'HTML5 功能',
+            'CSS3': 'CSS3 功能'
+        };
+        return descriptions[category] || `包含 ${category} 相關的 Web API 和功能`;
+    }
 }
 /**
  * API 名稱到 Can I Use ID 的映射
