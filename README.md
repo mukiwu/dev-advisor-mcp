@@ -283,11 +283,19 @@ npm install -g @mukiwu/dev-advisor-mcp
 
 **輸出內容：**
 - 執行摘要（檔案數、建議數、效能提升預估）
+- **API 類別分析**：自動從 Can I Use 資料庫取得所有類別，分析專案中使用的現代 API 所屬類別
 - 風險評估（破壞性變更、預估工時）
 - 函式庫替換建議（jQuery → 原生 DOM API）
 - API 現代化建議（XMLHttpRequest → fetch）
 - 語法現代化建議（var → let/const）
 - 模式現代化建議（callback → Promise/async-await）
+
+**分析流程：**
+1. 🔍 自動從 Can I Use 資料庫取得所有可用的 API 類別
+2. 📋 分析專案中建議使用的現代 API
+3. 🎯 為每個現代 API 找出對應的類別
+4. 📊 統計並顯示專案使用的 API 類別分布
+5. ✅ 生成完整的現代化分析報告
 
 ---
 
@@ -366,8 +374,16 @@ ResizeObserver 在 Safari 12 有支援嗎？
 - 可取代的第三方函式庫
 - Polyfill 建議
 - 實作建議（可直接使用 / 需要 Polyfill / 需要替代方案）
+- **類別分析資訊**：顯示從 Can I Use 資料庫匹配的相關類別
 
-**支援的 API 類別：**
+**推薦流程：**
+1. 🔍 自動從 Can I Use 資料庫取得所有可用的 API 類別
+2. 🎯 根據需求描述匹配相關的類別
+3. 📋 從匹配類別中找出相關的 API
+4. 🔗 結合預定義知識庫的推薦結果
+5. ✅ 查詢瀏覽器相容性並生成最終推薦
+
+**支援的 API 類別（預定義知識庫 + Can I Use 動態類別）：**
 - HTTP 請求：Fetch API、AbortController
 - DOM 操作：querySelector、classList、MutationObserver
 - 觀察者：IntersectionObserver、ResizeObserver
@@ -379,9 +395,35 @@ ResizeObserver 在 Safari 12 有支援嗎？
 - 動畫：requestAnimationFrame、Web Animations API
 - 其他：Clipboard API、Geolocation、Notification API
 
+**注意**: `recommend_api_combination` 工具現在會自動使用 `list_api_categories` 取得完整的類別列表，然後根據需求匹配相關類別，提供更準確和完整的推薦結果。您也可以單獨使用 `list_api_categories` 工具查看所有可用的 API 類別。
+
 ---
 
-### 5. `analyze_compatibility`
+### 5. `list_api_categories`
+
+列出所有可用的 Web API 類別，從 Can I Use 資料庫中取得完整的類別列表。
+
+**參數：**
+無參數
+
+**使用範例：**
+```
+列出所有可用的 Web API 類別
+取得完整的 API 類別清單
+```
+
+**輸出內容：**
+- 所有可用的 Web API 類別列表
+- 每個類別的功能數量
+- 類別說明
+- 使用建議
+
+**說明：**
+此工具從 Can I Use 資料庫動態提取所有類別，提供比 `recommend_api_combination` 更完整的類別資訊。這些類別反映了 Can I Use 資料庫中的實際分類，可用於了解 Web API 的完整生態系統。
+
+---
+
+### 6. `analyze_compatibility`
 
 分析專案中使用的 API 與目標瀏覽器的相容性，自動偵測 browserslist 配置。
 

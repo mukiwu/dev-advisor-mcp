@@ -114,6 +114,19 @@ export declare class CanIUseService {
      * 取得特定類別的功能列表
      */
     getFeaturesByCategory(category: string): Promise<string[]>;
+    /**
+     * 取得所有可用的 API 類別
+     * 從 Can I Use 資料庫中提取所有唯一的類別
+     */
+    getAllCategories(): Promise<Array<{
+        name: string;
+        count: number;
+        description?: string;
+    }>>;
+    /**
+     * 取得類別的描述
+     */
+    private getCategoryDescription;
 }
 /**
  * API 名稱到 Can I Use ID 的映射
