@@ -16,7 +16,15 @@ jobs:
       
       - uses: mukiwu/dev-advisor-mcp@v1
         with:
+          # AI 分析模式
           ai-enabled: true
           ai-provider: 'gemini'
+          ai-model: 'gemini-2.5-pro'
           ai-api-key: ${{ secrets.GEMINI_API_KEY }}
-          comment-on-pr: true
+          
+          # 整合規則式分析（推薦啟用）
+          enable-modernization: true  # 啟用後會整合規則式分析到 AI 分析中
+          
+          # 其他選項
+          project-path: '.'  # 專案路徑，預設為當前目錄
+          comment-on-pr: true  # 在 PR 中留言
