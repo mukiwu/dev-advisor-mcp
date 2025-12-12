@@ -19,6 +19,7 @@ import { ReportFormatter, ReportFormat } from './utils/report-formatter.js';
 import { ModernizationRules } from './data/modernization-rules.js';
 import { MDNService } from './services/mdn-service.js';
 import { CanIUseService } from './services/caniuse-service.js';
+import { BaselineService } from './services/baseline-service.js';
 import { ApiRecommendationKnowledge, RecommendedApi } from './data/api-recommendations.js';
 
 /**
@@ -72,6 +73,7 @@ class DevAdvisorServer {
   private rules: ModernizationRules;
   private mdnService: MDNService;
   private canIUseService: CanIUseService;
+  private baselineService: BaselineService;
   private apiKnowledge: ApiRecommendationKnowledge;
 
   constructor() {
@@ -91,6 +93,7 @@ class DevAdvisorServer {
 
     this.codeParser = new CodeParser();
     this.canIUseService = new CanIUseService();
+    this.baselineService = new BaselineService();
     this.modernizationAnalyzer = new ModernizationAnalyzer(this.codeParser);
     this.compatibilityAnalyzer = new CompatibilityAnalyzer(this.codeParser, this.canIUseService);
     this.reportFormatter = new ReportFormatter();
@@ -259,8 +262,8 @@ class DevAdvisorServer {
         case 'search_mdn':
           return await this.handleMDNSearch(request.params.arguments);
 
-        case 'check_browser_support':
-          return await this.handleBrowserSupportCheck(request.params.arguments);
+        case 'check_compatibility':
+          return await this.handleCompatibilityCheck(request.params.arguments);
 
         case 'list_api_categories':
           return await this.handleListApiCategories(request.params.arguments);
@@ -715,11 +718,20 @@ class DevAdvisorServer {
       polyfillAvailable: boolean;
       polyfillUrl?: string;
     } | null;
+    baseline: {
+      status: string;
+      label: string;
+      description: string;
+      icon: string;
+      safeToUse: boolean;
+      recommendation: string;
+    } | null;
   }>> {
     const results = [];
 
     for (const api of apis) {
       let compatibility = null;
+      let baseline = null;
 
       try {
         // 使用 Can I Use 查詢相容性
@@ -732,7 +744,27 @@ class DevAdvisorServer {
         console.warn(`無法取得 ${api.name} 的相容性資料:`, error);
       }
 
-      results.push({ api, compatibility });
+      // 查詢 Baseline 狀態
+      try {
+        const baselineMatches = await this.baselineService.searchFeature(api.name);
+        if (baselineMatches.length > 0) {
+          const baselineFeature = await this.baselineService.getFeature(baselineMatches[0].id) || baselineMatches[0];
+          if (baselineFeature.baseline) {
+            baseline = {
+              status: baselineFeature.baseline.status,
+              label: this.baselineService.getBaselineLabel(baselineFeature.baseline.status),
+              description: this.baselineService.getBaselineDescription(baselineFeature.baseline.status),
+              icon: this.baselineService.getBaselineIcon(baselineFeature.baseline.status),
+              safeToUse: this.baselineService.isSafeToUse(baselineFeature),
+              recommendation: this.baselineService.getRecommendation(baselineFeature)
+            };
+          }
+        }
+      } catch (error) {
+        console.warn(`無法取得 ${api.name} 的 Baseline 狀態:`, error);
+      }
+
+      results.push({ api, compatibility, baseline });
     }
 
     return results;
@@ -753,6 +785,14 @@ class DevAdvisorServer {
         recommendation: string;
         polyfillAvailable: boolean;
         polyfillUrl?: string;
+      } | null;
+      baseline: {
+        status: string;
+        label: string;
+        description: string;
+        icon: string;
+        safeToUse: boolean;
+        recommendation: string;
       } | null;
     }>,
     targetBrowsers: Record<string, string>,
@@ -793,15 +833,29 @@ class DevAdvisorServer {
     for (const [category, items] of byCategory) {
       report += `### 📁 ${category}\n\n`;
 
-      for (const { api, compatibility } of items) {
+      for (const { api, compatibility, baseline } of items) {
         // API 標題和支援狀態
         const supportIcon = compatibility
           ? (compatibility.notSupported.length === 0 ? '✅' :
             compatibility.supported.length > 0 ? '⚠️' : '❌')
           : '❓';
 
-        report += `#### ${supportIcon} ${api.name}\n\n`;
+        // 如果有 Baseline 狀態，優先使用 Baseline 圖示
+        const displayIcon = baseline ? baseline.icon : supportIcon;
+
+        report += `#### ${displayIcon} ${api.name}\n\n`;
         report += `${api.description}\n\n`;
+
+        // Baseline 狀態
+        if (baseline) {
+          report += `**📊 Baseline 狀態**: ${baseline.icon} **${baseline.label}**\n\n`;
+          report += `${baseline.description}\n\n`;
+          if (baseline.safeToUse) {
+            report += `✅ **可安全使用** - 此 API 在所有核心瀏覽器中都支援\n\n`;
+          } else {
+            report += `⚠️ **需謹慎使用** - 建議檢查目標瀏覽器支援情況\n\n`;
+          }
+        }
 
         // 用途
         report += `**適用場景**: ${api.useCases.join('、')}\n\n`;
@@ -1053,9 +1107,9 @@ class DevAdvisorServer {
   }
 
   /**
-   * 處理瀏覽器支援檢查請求
+   * 處理相容性檢查請求（整合 Can I Use 和 Baseline）
    */
-  private async handleBrowserSupportCheck(args: unknown) {
+  private async handleCompatibilityCheck(args: unknown) {
     try {
       if (!args || typeof args !== 'object') {
         throw new ValidationError('參數格式錯誤');
@@ -1070,127 +1124,170 @@ class DevAdvisorServer {
         throw new ValidationError('feature 為必填欄位，請提供要檢查的 Web API 功能名稱');
       }
 
-      // 搜尋功能
-      const matches = await this.canIUseService.searchFeature(feature);
+      // 同時查詢 Can I Use 和 Baseline
+      const [caniuseMatches, baselineMatches] = await Promise.all([
+        this.canIUseService.searchFeature(feature),
+        this.baselineService.searchFeature(feature)
+      ]);
 
-      if (matches.length === 0) {
+      // 如果兩個來源都找不到
+      if (caniuseMatches.length === 0 && baselineMatches.length === 0) {
         return {
           content: [{
             type: 'text',
-            text: `🔍 Can I Use 查詢結果\n\n找不到與 "${feature}" 相關的功能。\n\n建議：\n- 嘗試使用不同的關鍵字\n- 常見功能名稱：fetch, flexbox, css-grid, webgl, es6-module, async-functions`
+            text: `🔍 相容性查詢結果\n\n找不到與 "${feature}" 相關的功能。\n\n建議：\n- 嘗試使用不同的關鍵字\n- 常見功能名稱：fetch, flexbox, css-grid, webgl, es6-module, async-functions`
           }]
         };
       }
 
-      // 取得詳細支援資訊
-      const featureSupport = await this.canIUseService.getFeatureSupport(matches[0]);
+      let report = `# 🌐 Web API 相容性報告: ${feature}\n\n`;
 
-      if (!featureSupport) {
-        return {
-          content: [{
-            type: 'text',
-            text: `無法取得 "${feature}" 的詳細支援資訊`
-          }],
-          isError: true
-        };
-      }
+      // ========== Can I Use 資料 ==========
+      if (caniuseMatches.length > 0) {
+        const featureSupport = await this.canIUseService.getFeatureSupport(caniuseMatches[0]);
 
-      // 檢查相容性
-      const compatReport = await this.canIUseService.checkCompatibility(
-        matches[0],
-        targetBrowsers as Record<string, string>
-      );
+        if (featureSupport) {
+          const compatReport = await this.canIUseService.checkCompatibility(
+            caniuseMatches[0],
+            targetBrowsers as Record<string, string>
+          );
 
-      // 格式化報告
-      let report = `# 🌐 瀏覽器相容性報告: ${featureSupport.title}\n\n`;
+          report += `## 📊 概覽\n\n`;
+          report += `- **功能**: ${featureSupport.title}\n`;
+          report += `- **全球支援率**: ${compatReport.globalSupport.toFixed(1)}%\n`;
+          report += `- **標準狀態**: ${this.getStatusText(featureSupport.status)}\n`;
 
-      report += `## 📊 概覽\n\n`;
-      report += `- **功能**: ${featureSupport.title}\n`;
-      report += `- **全球支援率**: ${compatReport.globalSupport.toFixed(1)}%\n`;
-      report += `- **狀態**: ${this.getStatusText(featureSupport.status)}\n`;
+          if (featureSupport.description) {
+            report += `\n### 說明\n${featureSupport.description}\n`;
+          }
 
-      if (featureSupport.description) {
-        report += `\n### 說明\n${featureSupport.description}\n`;
-      }
+          report += `\n## 🎯 目標瀏覽器相容性\n\n`;
+          report += `${compatReport.recommendation}\n\n`;
 
-      report += `\n## 🎯 目標瀏覽器相容性\n\n`;
-      report += `${compatReport.recommendation}\n\n`;
+          if (compatReport.supported.length > 0) {
+            report += `### ✅ 支援的瀏覽器\n`;
+            for (const browser of compatReport.supported) {
+              report += `- ${browser}\n`;
+            }
+            report += '\n';
+          }
 
-      if (compatReport.supported.length > 0) {
-        report += `### ✅ 支援的瀏覽器\n`;
-        for (const browser of compatReport.supported) {
-          report += `- ${browser}\n`;
-        }
-        report += '\n';
-      }
+          if (compatReport.partialSupport.length > 0) {
+            report += `### ⚠️ 部分支援\n`;
+            for (const browser of compatReport.partialSupport) {
+              report += `- ${browser}\n`;
+            }
+            report += '\n';
+          }
 
-      if (compatReport.partialSupport.length > 0) {
-        report += `### ⚠️ 部分支援\n`;
-        for (const browser of compatReport.partialSupport) {
-          report += `- ${browser}\n`;
-        }
-        report += '\n';
-      }
+          if (compatReport.notSupported.length > 0) {
+            report += `### ❌ 不支援\n`;
+            for (const browser of compatReport.notSupported) {
+              report += `- ${browser}\n`;
+            }
+            report += '\n';
+          }
 
-      if (compatReport.notSupported.length > 0) {
-        report += `### ❌ 不支援\n`;
-        for (const browser of compatReport.notSupported) {
-          report += `- ${browser}\n`;
-        }
-        report += '\n';
-      }
+          // Polyfill 資訊
+          if (compatReport.polyfillAvailable) {
+            report += `## 🔧 Polyfill\n\n`;
+            report += `此功能有 polyfill 可用。\n`;
+            if (compatReport.polyfillUrl) {
+              report += `\n\`\`\`html\n<script src="${compatReport.polyfillUrl}"></script>\n\`\`\`\n`;
+            }
+            report += '\n';
+          }
 
-      // Polyfill 資訊
-      if (compatReport.polyfillAvailable) {
-        report += `## 🔧 Polyfill\n\n`;
-        report += `此功能有 polyfill 可用。\n`;
-        if (compatReport.polyfillUrl) {
-          report += `\n\`\`\`html\n<script src="${compatReport.polyfillUrl}"></script>\n\`\`\`\n`;
-        }
-        report += '\n';
-      }
+          // 各瀏覽器詳細支援版本
+          report += `## 📱 各瀏覽器支援版本\n\n`;
+          const browsers = featureSupport.browsers;
 
-      // 各瀏覽器詳細支援版本
-      report += `## 📱 各瀏覽器支援版本\n\n`;
-      const browsers = featureSupport.browsers;
+          const browserNames: Record<string, string> = {
+            chrome: 'Chrome',
+            firefox: 'Firefox',
+            safari: 'Safari',
+            edge: 'Edge',
+            ie: 'Internet Explorer',
+            opera: 'Opera',
+            ios_saf: 'iOS Safari',
+            android: 'Android Browser',
+            samsung: 'Samsung Internet'
+          };
 
-      const browserNames: Record<string, string> = {
-        chrome: 'Chrome',
-        firefox: 'Firefox',
-        safari: 'Safari',
-        edge: 'Edge',
-        ie: 'Internet Explorer',
-        opera: 'Opera',
-        ios_saf: 'iOS Safari',
-        android: 'Android Browser',
-        samsung: 'Samsung Internet'
-      };
-
-      for (const [key, name] of Object.entries(browserNames)) {
-        const support = (browsers as any)[key];
-        if (support) {
-          const icon = support.supported ? '✅' : (support.partialSupport ? '⚠️' : '❌');
-          const version = support.sinceVersion ? `v${support.sinceVersion}+` : (support.supported ? '支援' : '不支援');
-          report += `| ${icon} ${name} | ${version} |\n`;
+          for (const [key, name] of Object.entries(browserNames)) {
+            const support = (browsers as any)[key];
+            if (support) {
+              const icon = support.supported ? '✅' : (support.partialSupport ? '⚠️' : '❌');
+              const version = support.sinceVersion ? `v${support.sinceVersion}+` : (support.supported ? '支援' : '不支援');
+              report += `| ${icon} ${name} | ${version} |\n`;
+            }
+          }
+          report += '\n';
         }
       }
 
-      // 相關連結
-      if (featureSupport.mdnUrl) {
-        report += `\n## 🔗 相關連結\n\n`;
-        report += `- [MDN 文件](${featureSupport.mdnUrl})\n`;
-      }
-      if (featureSupport.specUrl) {
-        report += `- [規範](${featureSupport.specUrl})\n`;
-      }
-      report += `- [Can I Use](https://caniuse.com/${matches[0]})\n`;
+      // ========== Baseline 狀態 ==========
+      report += `## 📊 Baseline 狀態\n\n`;
 
-      // 如果找到多個匹配，列出其他選項
-      if (matches.length > 1) {
+      if (baselineMatches.length > 0) {
+        const baselineInfo = await this.baselineService.getFeature(baselineMatches[0].id) || baselineMatches[0];
+
+        if (baselineInfo.baseline) {
+          report += this.baselineService.formatBaselineInfo(baselineInfo);
+          report += `\n${this.baselineService.getRecommendation(baselineInfo)}\n\n`;
+
+          // Baseline 的瀏覽器支援資訊
+          if (baselineInfo.compat) {
+            report += `### Baseline 瀏覽器支援\n\n`;
+            const compat = baselineInfo.compat;
+
+            if (compat.chrome) {
+              const since = compat.chrome.since || '未知';
+              const flags = compat.chrome.flags ? ' (需要啟用實驗性功能)' : '';
+              report += `- **Chrome**: ${since}${flags}\n`;
+            }
+            if (compat.firefox) {
+              const since = compat.firefox.since || '未知';
+              const flags = compat.firefox.flags ? ' (需要啟用實驗性功能)' : '';
+              report += `- **Firefox**: ${since}${flags}\n`;
+            }
+            if (compat.safari) {
+              const since = compat.safari.since || '未知';
+              const flags = compat.safari.flags ? ' (需要啟用實驗性功能)' : '';
+              report += `- **Safari**: ${since}${flags}\n`;
+            }
+            if (compat.edge) {
+              const since = compat.edge.since || '未知';
+              const flags = compat.edge.flags ? ' (需要啟用實驗性功能)' : '';
+              report += `- **Edge**: ${since}${flags}\n`;
+            }
+            report += '\n';
+          }
+        } else {
+          report += `❓ 此功能尚未有 Baseline 狀態資訊\n\n`;
+        }
+      } else {
+        report += `❓ 在 Baseline 資料庫中找不到此功能\n\n`;
+        report += `建議查閱 [web.dev/baseline](https://web.dev/baseline) 確認。\n\n`;
+      }
+
+      // ========== 相關連結 ==========
+      report += `## 🔗 相關連結\n\n`;
+      if (caniuseMatches.length > 0) {
+        report += `- [Can I Use](https://caniuse.com/${caniuseMatches[0]})\n`;
+      }
+      if (baselineMatches.length > 0 && baselineMatches[0].mdn?.url) {
+        report += `- [MDN 文件](${baselineMatches[0].mdn.url})\n`;
+      }
+      report += `- [Baseline 狀態](https://web.dev/baseline)\n`;
+
+      // 其他相關功能
+      const allMatches = [...new Set([...caniuseMatches.slice(1, 4), ...baselineMatches.slice(1, 4).map(m => m.name)])];
+      if (allMatches.length > 0) {
         report += `\n## 🔍 其他相關功能\n\n`;
         report += `您可能也在尋找：\n`;
-        for (const match of matches.slice(1, 6)) {
-          report += `- \`${match}\`\n`;
+        for (const match of allMatches.slice(0, 5)) {
+          report += `- \`${typeof match === 'string' ? match : match}\`\n`;
         }
       }
 
@@ -1204,7 +1301,7 @@ class DevAdvisorServer {
     } catch (error) {
       const errorMessage = error instanceof ValidationError
         ? `參數驗證失敗: ${error.message}`
-        : `瀏覽器支援檢查失敗: ${error instanceof Error ? error.message : String(error)}`;
+        : `相容性檢查失敗: ${error instanceof Error ? error.message : String(error)}`;
 
       return {
         content: [{ type: 'text', text: errorMessage }],

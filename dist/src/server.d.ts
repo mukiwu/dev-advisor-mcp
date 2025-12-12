@@ -12,6 +12,7 @@ declare class DevAdvisorServer {
     private rules;
     private mdnService;
     private canIUseService;
+    private baselineService;
     private apiKnowledge;
     constructor();
     private setupHandlers;
@@ -51,9 +52,9 @@ declare class DevAdvisorServer {
      */
     private handleMDNSearch;
     /**
-     * 處理瀏覽器支援檢查請求
+     * 處理相容性檢查請求（整合 Can I Use 和 Baseline）
      */
-    private handleBrowserSupportCheck;
+    private handleCompatibilityCheck;
     /**
      * 處理列出所有 API 類別的請求
      */
