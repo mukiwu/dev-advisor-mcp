@@ -474,12 +474,47 @@ MCP Resources 讓 AI 可以直接讀取規則資料：
 
 預定義的分析提示模板：
 
-| 名稱 | 說明 |
-|------|------|
-| `analyze-project` | 分析專案的程式碼現代化機會 |
-| `migrate-library` | 取得特定函式庫的遷移指南 |
-| `modernize-pattern` | 取得程式碼模式的現代化建議 |
-| `quick-wins` | 取得低風險、高效益的快速改善建議 |
+| 名稱 | 說明 | 參數 |
+|------|------|------|
+| `analyze-project` | 分析專案的程式碼現代化機會 | `projectPath`（必填）、`focus`（選填：bundle-size/performance/security/all） |
+| `migrate-library` | 取得特定函式庫的遷移指南 | `library`（必填：如 jquery, moment, lodash） |
+| `modernize-pattern` | 取得程式碼模式的現代化建議 | `pattern`（必填：如 callback, var, for-loop, iife） |
+| `quick-wins` | 取得低風險、高效益的快速改善建議 | `projectPath`（必填） |
+| `analyze-pr` | 分析 Git PR 的程式碼變更，整合規則式分析和 AI 分析 | `projectPath`（必填）、`prDiff`（選填）、`changedFiles`（選填：JSON 陣列） |
+
+### `analyze-pr` 模板詳細說明
+
+這個模板整合了規則式分析和 AI 分析，專門用於分析 Git PR 的程式碼變更。
+
+**功能特色：**
+- ✅ **只分析 PR 變更的檔案**：不會掃描整個專案，專注於 PR 中的變更
+- ✅ **整合規則式分析**：使用 `analyze_modernization` 工具進行規則式檢查
+- ✅ **整合完整 Web API 列表**：使用 `list_api_categories` 取得所有可用的 Web API
+- ✅ **AI 評估**：結合 PR diff 內容進行智慧評估
+- ✅ **綜合報告**：提供包含現代化建議、API 優化、相容性檢查的完整報告
+
+**參數說明：**
+- `projectPath`（必填）：專案目錄路徑
+- `prDiff`（選填）：PR 的 diff 內容。如果提供，AI 會直接分析 diff 內容
+- `changedFiles`（選填）：PR 變更的檔案列表，JSON 陣列格式，例如：`["src/file1.js", "src/file2.ts"]`。如果提供，`analyze_modernization` 工具只會分析這些檔案
+
+**使用範例：**
+
+```
+請使用 analyze-pr 提示模板分析我的 PR
+```
+
+或者提供具體參數：
+
+```
+請使用 analyze-pr 提示模板，projectPath 設為 "."，changedFiles 設為 ["src/components/Button.tsx", "src/utils/helpers.ts"]
+```
+
+**分析流程：**
+1. 取得完整的 Web API 類別列表（`list_api_categories`）
+2. 對 PR 變更的檔案進行規則式分析（`analyze_modernization`）
+3. 結合 PR diff 內容進行 AI 評估
+4. 提供整合的分析報告，包含現代化建議、API 優化建議、相容性檢查等
 
 ## 📋 支援的現代化規則
 

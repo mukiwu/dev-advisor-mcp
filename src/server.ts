@@ -1454,6 +1454,27 @@ class DevAdvisorServer {
                 required: true
               }
             ]
+          },
+          {
+            name: 'analyze-pr',
+            description: '分析 Git PR 的程式碼變更，整合規則式分析和 AI 分析，提供現代化建議',
+            arguments: [
+              {
+                name: 'projectPath',
+                description: '專案目錄路徑',
+                required: true
+              },
+              {
+                name: 'prDiff',
+                description: 'PR 的 diff 內容（可選，如果提供則會用於 AI 分析）',
+                required: false
+              },
+              {
+                name: 'changedFiles',
+                description: 'PR 變更的檔案列表（JSON 陣列，如 ["src/file1.js", "src/file2.ts"]）',
+                required: false
+              }
+            ]
           }
         ]
       };
@@ -1627,6 +1648,104 @@ ${rule.migrationExample}
 - 可能造成破壞性變更的建議
 
 請使用 analyze_modernization 工具，然後篩選出符合「快速勝利」條件的建議。`
+                }
+              }
+            ]
+          };
+        }
+
+        case 'analyze-pr': {
+          const projectPath = args?.projectPath || '.';
+          const prDiff = args?.prDiff;
+          const changedFiles = args?.changedFiles;
+
+          // 構建檔案模式（如果提供了變更檔案列表）
+          let includePatternsText = '';
+          if (changedFiles) {
+            try {
+              const files = typeof changedFiles === 'string' ? JSON.parse(changedFiles) : changedFiles;
+              if (Array.isArray(files) && files.length > 0) {
+                includePatternsText = `\n\n**注意**：請使用 analyze_modernization 工具時，將 includePatterns 參數設為：\n\`\`\`json\n${JSON.stringify(files, null, 2)}\n\`\`\`\n\n這樣可以只分析 PR 變更的檔案，而不是整個專案。`;
+              }
+            } catch (e) {
+              // 忽略解析錯誤
+            }
+          }
+
+          let prDiffSection = '';
+          if (prDiff) {
+            prDiffSection = `\n\n## PR Diff 內容\n\n以下是 PR 的程式碼變更：\n\n\`\`\`diff\n${prDiff}\n\`\`\`\n\n請仔細分析這些變更，找出可以優化的地方。`;
+          }
+
+          return {
+            messages: [
+              {
+                role: 'user',
+                content: {
+                  type: 'text',
+                  text: `請分析 Git PR 的程式碼變更，整合規則式分析和 AI 分析，提供完整的現代化建議。
+
+## 分析步驟
+
+### 步驟 1：取得完整的 Web API 列表
+首先，請使用 \`list_api_categories\` 工具取得所有可用的 Web API 類別列表。這將幫助你了解有哪些現代 Web API 可以使用。
+
+### 步驟 2：規則式分析（針對 PR 變更的檔案）
+使用 \`analyze_modernization\` 工具分析 PR 變更的檔案${includePatternsText ? includePatternsText : '。如果提供了 changedFiles 參數，請只分析這些檔案；否則分析整個專案。'}${prDiffSection}
+
+### 步驟 3：整合分析結果
+結合以下資訊進行評估：
+1. **規則式分析結果**：從 analyze_modernization 工具獲得的現代化建議
+2. **Web API 列表**：從 list_api_categories 工具獲得的完整 API 類別
+3. **PR Diff 內容**：實際的程式碼變更（如果提供）
+
+### 步驟 4：提供綜合評估報告
+
+請提供一份整合的分析報告，包含：
+
+#### 1. PR 變更摘要
+- 這個 PR 做了什麼變更
+- 變更的檔案和範圍
+
+#### 2. 現代化建議（整合規則式分析）
+- **函式庫替換機會**：是否使用了可被原生 API 替代的函式庫（jQuery、Moment.js、Lodash 等）
+- **API 現代化機會**：是否使用了過時的 API（XMLHttpRequest、var、callback 等）
+- **語法現代化**：var → let/const、傳統 for 迴圈 → 陣列方法等
+
+#### 3. Web API 優化建議（基於完整 API 列表）
+- 針對 PR 中的功能需求，推薦更適合的現代 Web API
+- 例如：如果 PR 涉及圖片懶加載，推薦使用 IntersectionObserver
+- 如果涉及尺寸監聽，推薦使用 ResizeObserver
+- 參考 list_api_categories 的結果，找出相關的 API 類別
+
+#### 4. 瀏覽器相容性檢查
+- 檢查建議的現代 API 是否需要 polyfill
+- 使用 \`check_browser_support\` 工具檢查關鍵 API 的相容性
+- 提供 polyfill 建議和 CDN 連結
+
+#### 5. 風險評估
+- 評估變更的風險等級（low/medium/high）
+- 預估實施工時
+- 是否為破壞性變更
+
+#### 6. 優先順序建議
+- 按照「低風險、高效益」排序建議
+- 標記「快速勝利」項目（< 3 小時、低風險）
+- 標記需要進一步規劃的項目
+
+## 重要提示
+
+- **只分析 PR 變更的檔案**：不要分析整個專案，專注於 PR 中的變更
+- **整合兩種分析方式**：結合規則式分析（analyze_modernization）和 AI 分析（基於 PR diff）
+- **參考完整的 Web API 列表**：使用 list_api_categories 的結果來推薦最適合的現代 API
+- **提供具體的程式碼範例**：每個建議都應該包含「之前」和「之後」的程式碼對比
+- **引用 MDN 文件**：使用 \`search_mdn\` 工具查詢相關 API 的文件，並在建議中附上連結
+
+## 專案路徑
+
+專案路徑：\`${projectPath}\`
+
+現在請開始執行分析步驟。`
                 }
               }
             ]

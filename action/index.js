@@ -7,10 +7,10 @@
  */
 
 import * as core from '@actions/core';
-import { runAllAnalyses } from './analyzer.js';
+import { runAllAnalyses, runModernizationAnalysis } from './analyzer.js';
 import { commentOnPR, commentAIReport } from './commenter.js';
 import { analyzeWithAI } from './ai-service.js';
-import { getPRDiff, getPRInfo } from './pr-diff.js';
+import { getPRDiff, getPRInfo, getPRFiles } from './pr-diff.js';
 
 async function main() {
   try {
@@ -55,10 +55,11 @@ async function main() {
       }
 
       try {
-        // 取得 PR diff
+        // 取得 PR diff 和變更檔案列表
         core.info('📥 取得 PR 變更內容...');
         const diff = await getPRDiff(githubToken);
         const prInfo = await getPRInfo(githubToken);
+        const prFiles = await getPRFiles(githubToken);
 
         if (!diff || diff.length === 0) {
           core.warning('PR 沒有程式碼變更，跳過 AI 分析');
@@ -73,12 +74,45 @@ async function main() {
           core.warning(`Diff 內容過長 (${diff.length} 字元)，已截斷至 ${maxDiffLength} 字元`);
         }
 
-        core.info('🧠 呼叫 AI 分析中...');
+        // 整合規則式分析（只針對 PR 變更的檔案）
+        let ruleBasedAnalysis = null;
+        if (enableModernization && prFiles && prFiles.length > 0) {
+          try {
+            core.info('📊 執行規則式分析（針對 PR 變更的檔案）...');
+            // 過濾出 JavaScript/TypeScript 檔案
+            const jsFiles = prFiles
+              .filter(file => {
+                const filename = file.filename.toLowerCase();
+                return filename.endsWith('.js') ||
+                  filename.endsWith('.ts') ||
+                  filename.endsWith('.jsx') ||
+                  filename.endsWith('.tsx');
+              })
+              .map(file => file.filename);
+
+            if (jsFiles.length > 0) {
+              // 將檔案列表轉換為 glob 模式（直接使用檔案路徑作為模式）
+              // 這樣可以只分析 PR 變更的檔案
+              ruleBasedAnalysis = await runModernizationAnalysis(
+                projectPath,
+                jsFiles, // 檔案路徑可以直接作為 glob 模式使用
+                excludePatterns
+              );
+              core.info(`✅ 規則式分析完成，發現 ${ruleBasedAnalysis.summary.totalSuggestions} 個建議`);
+            }
+          } catch (error) {
+            core.warning(`規則式分析失敗，將繼續使用 AI 分析: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+
+        core.info('🧠 呼叫 AI 分析中（整合規則式分析結果）...');
         const aiReport = await analyzeWithAI({
           provider: aiProvider,
           model: aiModel,
           apiKey: aiApiKey,
-          diff: truncatedDiff
+          diff: truncatedDiff,
+          ruleBasedAnalysis: ruleBasedAnalysis,
+          changedFiles: prFiles?.map(f => f.filename) || []
         });
 
         core.info('✅ AI 分析完成');

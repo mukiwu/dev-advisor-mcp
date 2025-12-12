@@ -5,7 +5,7 @@
 
 const SYSTEM_PROMPT = `你是一位專精於 Web API 現代化和瀏覽器相容性的資深前端專家。
 
-請分析以下 PR 的程式碼變更，並專注於以下幾個方面：
+請分析以下 PR 的程式碼變更，**整合規則式分析和 AI 分析**，提供完整的現代化建議。
 
 ## 分析重點
 
@@ -43,6 +43,14 @@ const SYSTEM_PROMPT = `你是一位專精於 Web API 現代化和瀏覽器相容
 - 平滑動畫 → requestAnimationFrame / Web Animations API
 - 剪貼簿操作 → Clipboard API
 
+## 整合規則式分析結果
+
+如果提供了規則式分析的結果（ruleBasedAnalysis），請：
+1. **優先參考規則式分析的建議**：這些是基於規則資料庫的客觀分析
+2. **結合 AI 分析**：基於 PR diff 的內容，提供更深入的建議
+3. **補充規則式分析未涵蓋的部分**：例如針對特定使用場景的優化建議
+4. **驗證規則式分析的建議**：確認這些建議是否適用於當前的 PR 變更
+
 ## 參考資料
 
 提供建議時，請盡可能引用 MDN Web Docs 的資料作為參考來源，並附上相關連結。
@@ -53,10 +61,35 @@ const SYSTEM_PROMPT = `你是一位專精於 Web API 現代化和瀏覽器相容
 ## 輸出格式
 
 請用繁體中文、條理分明地回覆，包含：
-1. **變更摘要**：這個 PR 做了什麼
-2. **現代化建議**：具體的改進建議（附程式碼範例和 MDN 連結）
-3. **相容性注意事項**：需要注意的瀏覽器相容性問題（附 Can I Use 或 MDN 連結）
-4. **整體評估**：這個 PR 的程式碼品質評估`;
+
+### 1. PR 變更摘要
+- 這個 PR 做了什麼變更
+- 變更的檔案和範圍
+
+### 2. 現代化建議（整合規則式分析和 AI 分析）
+- **規則式分析結果**（如果提供）：列出規則式分析發現的問題
+- **AI 分析補充**：基於 PR diff 的深入建議
+- **具體的改進建議**：附程式碼範例和 MDN 連結
+
+### 3. Web API 優化建議
+- 針對 PR 中的功能需求，推薦更適合的現代 Web API
+- 參考完整的 Web API 類別列表（如果提供）
+
+### 4. 相容性注意事項
+- 需要注意的瀏覽器相容性問題（附 Can I Use 或 MDN 連結）
+- Polyfill 建議和 CDN 連結
+
+### 5. 風險評估
+- 評估變更的風險等級（low/medium/high）
+- 預估實施工時
+- 是否為破壞性變更
+
+### 6. 優先順序建議
+- 按照「低風險、高效益」排序建議
+- 標記「快速勝利」項目（< 3 小時、低風險）
+
+### 7. 整體評估
+- 這個 PR 的程式碼品質評估`;
 
 // 提供者配置
 const PROVIDERS = {
@@ -165,9 +198,11 @@ const PROVIDERS = {
  * @param {string} options.model - 模型名稱（可選，使用預設）
  * @param {string} options.apiKey - API 金鑰
  * @param {string} options.diff - PR 的 diff 內容
+ * @param {Object} options.ruleBasedAnalysis - 規則式分析的結果（可選）
+ * @param {Array<string>} options.changedFiles - PR 變更的檔案列表（可選）
  * @returns {Promise<string>} AI 生成的分析報告
  */
-export async function analyzeWithAI({ provider, model, apiKey, diff }) {
+export async function analyzeWithAI({ provider, model, apiKey, diff, ruleBasedAnalysis = null, changedFiles = [] }) {
   const providerConfig = PROVIDERS[provider];
 
   if (!providerConfig) {
@@ -179,7 +214,33 @@ export async function analyzeWithAI({ provider, model, apiKey, diff }) {
   }
 
   const modelToUse = model || providerConfig.defaultModel;
-  const userPrompt = `請分析以下 PR 的程式碼變更：\n\n${diff}`;
+
+  // 構建用戶提示
+  let userPrompt = `請分析以下 PR 的程式碼變更：\n\n## PR Diff\n\`\`\`diff\n${diff}\n\`\`\`\n`;
+
+  // 添加變更檔案列表
+  if (changedFiles && changedFiles.length > 0) {
+    userPrompt += `\n## 變更的檔案\n\n`;
+    changedFiles.forEach(file => {
+      userPrompt += `- ${file}\n`;
+    });
+    userPrompt += `\n`;
+  }
+
+  // 添加規則式分析結果
+  if (ruleBasedAnalysis) {
+    userPrompt += `\n## 規則式分析結果\n\n`;
+    userPrompt += `以下是針對 PR 變更檔案的規則式分析結果：\n\n`;
+    userPrompt += `**掃描檔案數量**: ${ruleBasedAnalysis.summary.totalFiles}\n`;
+    userPrompt += `**發現建議數量**: ${ruleBasedAnalysis.summary.totalSuggestions}\n`;
+    userPrompt += `**風險等級**: ${ruleBasedAnalysis.summary.risk}\n`;
+
+    if (ruleBasedAnalysis.report) {
+      userPrompt += `\n### 詳細分析報告\n\n${ruleBasedAnalysis.report}\n\n`;
+    }
+
+    userPrompt += `\n**請整合以上規則式分析的結果，結合 PR diff 的內容，提供更深入的建議。**\n`;
+  }
 
   const request = providerConfig.formatRequest(modelToUse, SYSTEM_PROMPT, userPrompt, apiKey);
 
